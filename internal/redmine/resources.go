@@ -100,6 +100,7 @@ type Issue struct {
 	CreatedOn      string   `json:"created_on"`
 	UpdatedOn      string   `json:"updated_on"`
 	ClosedOn       *string  `json:"closed_on"`
+	IsPrivate      *bool    `json:"is_private"`
 }
 
 // ListIssues returns every issue visible to the API key, open and closed.

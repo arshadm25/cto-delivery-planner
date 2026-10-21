@@ -60,3 +60,18 @@ None of the files contain the API key, issue text or people's names. People appe
 - **Issues in projects missing from the project list.** Usually closed or archived projects, or projects the account is not a member of.
 - **Parent issues not visible.** Usually issues in projects the account cannot see.
 - Compare the hierarchy with Administration › Projects to settle open question Q1 (scope).
+
+## 6. Compare with the CSV exports (P1-09)
+
+After discovery, compare the CSV exports with the issue index. This reads local files only and makes no network requests.
+
+```bash
+make build
+./bin/csv-compare -tz Asia/Kolkata -discovery discovery-out path/to/export1.csv path/to/export2.csv
+```
+
+Set `-tz` to the time zone of the Redmine user who made the exports (My account › Preferences). The value above is an example. If their date or time format differs from `DD-MM-YYYY` and `05:45 PM`, also pass `-date-format` and `-time-format` as Go layouts.
+
+This writes `compare-out/compare-report.md` and `compare-out/compare-details.csv`. Neither file contains issue text or people's names. `docs/data-mapping.md` explains each column and category.
+
+Keep the CSV exports themselves out of the repository: they contain issue text and names.

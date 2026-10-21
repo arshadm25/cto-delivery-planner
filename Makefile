@@ -2,6 +2,7 @@
 
 build:
 	go build -o bin/redmine-discovery ./cmd/redmine-discovery
+	go build -o bin/csv-compare ./cmd/csv-compare
 
 test:
 	go test ./...
