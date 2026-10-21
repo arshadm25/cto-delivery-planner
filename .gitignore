@@ -6,6 +6,8 @@
 # Discovery and import output can contain Redmine data
 /out/
 /discovery-out/
+/compare-out/
+/exports/
 *.local.json
 
 # Go

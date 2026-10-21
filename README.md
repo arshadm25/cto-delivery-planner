@@ -13,7 +13,10 @@ Phase 1, discovery and baseline validation. What exists today:
 | `cmd/redmine-discovery` | Read-only CLI that builds the Phase 1 baseline report |
 | `internal/redmine` | Read-only Redmine REST client: pagination, retries, timeouts |
 | `internal/discovery` | Counts, project hierarchy and data-gap checks behind the report |
-| `docs/discovery.md` | How to run discovery on a trusted host |
+| `cmd/csv-compare` | Compares Redmine CSV exports with the discovery output, issue by issue |
+| `internal/csvcompare` | CSV parsing, field mapping and difference classification |
+| `docs/data-mapping.md` | How each CSV column maps to the Redmine API |
+| `docs/discovery.md` | How to run discovery and the CSV comparison on a trusted host |
 | `docs/redmine-environment.md` | Facts about the Redmine install, filled in during Phase 1 |
 
 The Next.js dashboard (`apps/web`), Go API and sync worker (`services/`) and PostgreSQL migrations come in later phases.

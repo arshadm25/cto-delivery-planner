@@ -138,7 +138,7 @@ func TestIssueIndexLeavesMissingValuesEmpty(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(b.String()), "\n")
 	// Issue 11 has no estimate, due date or assignee.
 	row := strings.Split(lines[2], ",")
-	if row[0] != "11" || row[7] != "" || row[10] != "" || row[12] != "" {
+	if row[0] != "11" || row[10] != "" || row[14] != "" || row[16] != "" {
 		t.Fatalf("row for issue 11 = %v", row)
 	}
 	if !strings.Contains(lines[1], "3.5") {

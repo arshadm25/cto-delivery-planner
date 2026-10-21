@@ -144,13 +144,18 @@ func WriteProjectsCSV(w io.Writer, r *Result) error {
 	return cw.Error()
 }
 
-// WriteIssueIndexCSV writes one row per issue with IDs, dates and numbers
-// only. Empty cells mean Redmine had no value.
+// IssueIndexHeader is the column order of issue-index.csv.
+var IssueIndexHeader = []string{"id", "project_id", "parent_id", "tracker_id", "tracker_name",
+	"status_id", "status_name", "is_closed", "priority_id", "priority_name",
+	"assigned_to_id", "fixed_version_id", "fixed_version_name", "start_date", "due_date",
+	"done_ratio", "estimated_hours", "spent_hours", "created_on", "updated_on", "closed_on", "is_private"}
+
+// WriteIssueIndexCSV writes one row per issue with IDs, dates, numbers and
+// the names of trackers, statuses, priorities and versions. It never writes
+// issue text or people's names. Empty cells mean Redmine had no value.
 func WriteIssueIndexCSV(w io.Writer, r *Result) error {
 	cw := csv.NewWriter(w)
-	cw.Write([]string{"id", "project_id", "parent_id", "tracker_id", "status_id", "is_closed",
-		"priority_id", "assigned_to_id", "fixed_version_id", "start_date", "due_date",
-		"done_ratio", "estimated_hours", "spent_hours", "created_on", "updated_on", "closed_on"})
+	cw.Write(IssueIndexHeader)
 	for _, is := range r.Issues {
 		closed := ""
 		if r.StatusKnown {
@@ -162,11 +167,13 @@ func WriteIssueIndexCSV(w io.Writer, r *Result) error {
 		}
 		cw.Write([]string{
 			strconv.Itoa(is.ID), strconv.Itoa(is.Project.ID), parent,
-			strconv.Itoa(is.Tracker.ID), strconv.Itoa(is.Status.ID), closed,
-			strconv.Itoa(is.Priority.ID), refID(is.AssignedTo), refID(is.FixedVersion),
+			strconv.Itoa(is.Tracker.ID), is.Tracker.Name,
+			strconv.Itoa(is.Status.ID), is.Status.Name, closed,
+			strconv.Itoa(is.Priority.ID), is.Priority.Name,
+			refID(is.AssignedTo), refID(is.FixedVersion), refName(is.FixedVersion),
 			str(is.StartDate), str(is.DueDate), intStr(is.DoneRatio),
 			floatStr(is.EstimatedHours), floatStr(is.SpentHours),
-			is.CreatedOn, is.UpdatedOn, str(is.ClosedOn),
+			is.CreatedOn, is.UpdatedOn, str(is.ClosedOn), boolStr(is.IsPrivate),
 		})
 	}
 	cw.Flush()
@@ -178,6 +185,20 @@ func refID(r *redmine.IDName) string {
 		return ""
 	}
 	return strconv.Itoa(r.ID)
+}
+
+func refName(r *redmine.IDName) string {
+	if r == nil {
+		return ""
+	}
+	return r.Name
+}
+
+func boolStr(b *bool) string {
+	if b == nil {
+		return ""
+	}
+	return strconv.FormatBool(*b)
 }
 
 func str(s *string) string {
