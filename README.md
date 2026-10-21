@@ -16,6 +16,7 @@ Phase 1, discovery and baseline validation. What exists today:
 | `cmd/csv-compare` | Compares Redmine CSV exports with the discovery output, issue by issue |
 | `internal/csvcompare` | CSV parsing, field mapping and difference classification |
 | `docs/data-mapping.md` | How each CSV column maps to the Redmine API |
+| `config/scope.json`, `docs/scope.md` | Project IDs the planner covers, and why |
 | `docs/discovery.md` | How to run discovery and the CSV comparison on a trusted host |
 | `docs/redmine-environment.md` | Facts about the Redmine install, filled in during Phase 1 |
 
