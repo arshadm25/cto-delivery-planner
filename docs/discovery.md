@@ -24,11 +24,7 @@ chmod 600 .env
 # Edit .env: set REDMINE_URL and REDMINE_API_KEY
 ```
 
-`.env` is git-ignored. Load it into your shell without echoing it:
-
-```bash
-set -a; . ./.env; set +a
-```
+`.env` is git-ignored. The tools read it automatically when run from the repo folder, so no `source` step is needed. Write values without quotes or with plain double quotes. Anything already exported in your shell takes precedence over the file, and `-env-file` points at a different file.
 
 ## 3. Test authentication (P1-06)
 

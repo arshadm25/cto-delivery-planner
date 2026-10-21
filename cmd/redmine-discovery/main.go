@@ -1,8 +1,10 @@
 // Command redmine-discovery reads projects and issues from Redmine and writes
 // the Phase 1 baseline report. It only sends GET requests.
 //
-// The Redmine URL and API key come from REDMINE_URL and REDMINE_API_KEY.
-// The key is never printed.
+// The Redmine URL and API key come from REDMINE_URL and REDMINE_API_KEY,
+// read from the environment or from a .env file in the current directory.
+// Variables already exported in the shell take precedence. The key is never
+// printed.
 package main
 
 import (
@@ -14,16 +16,29 @@ import (
 	"time"
 
 	"github.com/arshadm25/cto-delivery-planner/internal/discovery"
+	"github.com/arshadm25/cto-delivery-planner/internal/envfile"
 	"github.com/arshadm25/cto-delivery-planner/internal/redmine"
 )
 
 func main() {
+	envFile := flag.String("env-file", ".env", "file with REDMINE_URL and REDMINE_API_KEY; skipped if missing")
 	out := flag.String("out", "discovery-out", "directory for report.md, projects.csv and issue-index.csv")
 	pageSize := flag.Int("page-size", envInt("REDMINE_PAGE_SIZE", 100), "requested page size; the server may cap it")
 	timeout := flag.Duration("timeout", envDuration("REDMINE_REQUEST_TIMEOUT", 30*time.Second), "per-request timeout")
 	retries := flag.Int("retries", 3, "retries for network errors, HTTP 429 and 5xx")
 	authOnly := flag.Bool("auth-only", false, "only test authentication against /users/current.json")
 	flag.Parse()
+
+	if _, err := envfile.Load(*envFile); err != nil {
+		fail("%v", err)
+	}
+	// Flag defaults were computed before .env was read.
+	if !flagSet("page-size") {
+		*pageSize = envInt("REDMINE_PAGE_SIZE", *pageSize)
+	}
+	if !flagSet("timeout") {
+		*timeout = envDuration("REDMINE_REQUEST_TIMEOUT", *timeout)
+	}
 
 	client, err := redmine.NewClient(redmine.Config{
 		BaseURL:    os.Getenv("REDMINE_URL"),
@@ -33,7 +48,7 @@ func main() {
 		MaxRetries: *retries,
 	})
 	if err != nil {
-		fail("%v (set REDMINE_URL and REDMINE_API_KEY in the environment)", err)
+		fail("%v (set REDMINE_URL and REDMINE_API_KEY in %s or the environment)", err, *envFile)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -61,6 +76,16 @@ func main() {
 		fmt.Println("Warning:", w)
 	}
 	fmt.Printf("Report written to %s/report.md\n", *out)
+}
+
+func flagSet(name string) bool {
+	set := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			set = true
+		}
+	})
+	return set
 }
 
 func fail(format string, a ...any) {
