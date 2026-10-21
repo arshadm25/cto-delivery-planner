@@ -1,0 +1,23 @@
+# Secrets: never commit real environment files
+.env
+.env.*
+!.env.example
+
+# Discovery and import output can contain Redmine data
+/out/
+/discovery-out/
+*.local.json
+
+# Go
+/bin/
+*.test
+coverage.out
+
+# Node / Next.js
+node_modules/
+.next/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
