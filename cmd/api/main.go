@@ -83,6 +83,8 @@ func main() {
 		SyncStaleAfter: config.Duration("SYNC_STALE_AFTER", 2*time.Hour),
 	}, store.New(pool), as, log)
 
+	go srv.RunSnapshotLoop(ctx, config.Int("SNAPSHOT_RETENTION_DAYS", 730), log)
+
 	hs := &http.Server{
 		Addr:              config.String("API_ADDR", ":8080"),
 		Handler:           srv,

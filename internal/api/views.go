@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/arshadm25/cto-delivery-planner/internal/forecast"
+	"github.com/arshadm25/cto-delivery-planner/internal/planning"
 	"github.com/arshadm25/cto-delivery-planner/internal/risks"
 	"github.com/arshadm25/cto-delivery-planner/internal/store"
 )
@@ -18,6 +21,11 @@ type analysis struct {
 	flags    map[int][]risks.Flag // by project
 	byIssue  map[int][]string     // issue -> flag kinds
 	projects map[int]*ProjectSummary
+	// Phase 4 inputs, loaded by addDelivery.
+	calendar        forecast.Calendar
+	commitments     []planning.Commitment
+	allocations     []planning.Allocation
+	versionDelivery map[int64]*Delivery // by commitment ID
 }
 
 // IssueCounts are open/closed totals and data gaps for open issues.
@@ -63,12 +71,12 @@ type ProjectSummary struct {
 	Delivery *Delivery `json:"delivery,omitempty"`
 }
 
-func (s *Server) analyze(r *http.Request) (*analysis, error) {
-	d, err := s.store.Dataset(r.Context())
+func (s *Server) analyze(ctx context.Context) (*analysis, error) {
+	d, err := s.store.Dataset(ctx)
 	if err != nil {
 		return nil, err
 	}
-	rules, err := s.store.Rules(r.Context(), s.today())
+	rules, err := s.store.Rules(ctx, s.today())
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +95,7 @@ func (s *Server) analyze(r *http.Request) (*analysis, error) {
 		a.flags[p.ID] = fs
 		a.projects[p.ID] = s.summarize(a, p, issues, versions)
 	}
-	if err := s.addDelivery(r, a); err != nil {
+	if err := s.addDelivery(ctx, a); err != nil {
 		return nil, err
 	}
 	for id, fs := range a.flags {
@@ -258,7 +266,7 @@ type PortfolioSummary struct {
 }
 
 func (s *Server) handlePortfolio(w http.ResponseWriter, r *http.Request) {
-	a, err := s.analyze(r)
+	a, err := s.analyze(r.Context())
 	if err != nil {
 		s.internal(w, r, err)
 		return
@@ -302,7 +310,7 @@ func (s *Server) handlePortfolio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out.DataStale = out.LastSuccessfulSync == nil || s.cfg.Now().Sub(*out.LastSuccessfulSync) > s.cfg.SyncStaleAfter
-	out.WorkloadConcerns, err = s.workloadConcerns(r, a)
+	out.WorkloadConcerns, err = s.workloadConcerns(r.Context(), current(r).access, a)
 	if err != nil {
 		s.internal(w, r, err)
 		return
@@ -311,7 +319,7 @@ func (s *Server) handlePortfolio(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
-	a, err := s.analyze(r)
+	a, err := s.analyze(r.Context())
 	if err != nil {
 		s.internal(w, r, err)
 		return
@@ -340,7 +348,7 @@ func (s *Server) projectFor(w http.ResponseWriter, r *http.Request) (*analysis, 
 		writeError(w, http.StatusNotFound, "project not found")
 		return nil, nil, false
 	}
-	a, err := s.analyze(r)
+	a, err := s.analyze(r.Context())
 	if err != nil {
 		s.internal(w, r, err)
 		return nil, nil, false
@@ -535,11 +543,12 @@ func contains(list []string, s string) bool {
 // MilestoneView is a version with progress and its flags.
 type MilestoneView struct {
 	MilestoneRef
-	RemainingEstimatedHours *float64     `json:"remaining_estimated_hours"`
-	OpenNoEstimate          int          `json:"open_no_estimate"`
-	Flags                   []risks.Flag `json:"flags"`
-	RedmineURL              string       `json:"redmine_url,omitempty"`
-	Commitment              *Commitment  `json:"commitment,omitempty"`
+	RemainingEstimatedHours *float64             `json:"remaining_estimated_hours"`
+	OpenNoEstimate          int                  `json:"open_no_estimate"`
+	Flags                   []risks.Flag         `json:"flags"`
+	RedmineURL              string               `json:"redmine_url,omitempty"`
+	Commitment              *planning.Commitment `json:"commitment,omitempty"`
+	Delivery                *Delivery            `json:"delivery,omitempty"`
 }
 
 func (s *Server) handleMilestones(w http.ResponseWriter, r *http.Request) {
@@ -582,7 +591,7 @@ func (s *Server) handleMilestones(w http.ResponseWriter, r *http.Request) {
 		}
 		out[i] = mv
 	}
-	if err := s.attachCommitments(r, ps.ID, out); err != nil {
+	if err := s.attachCommitments(r.Context(), a, ps.ID, out); err != nil {
 		s.internal(w, r, err)
 		return
 	}
@@ -597,7 +606,7 @@ type FlagView struct {
 }
 
 func (s *Server) handleRisks(w http.ResponseWriter, r *http.Request) {
-	a, err := s.analyze(r)
+	a, err := s.analyze(r.Context())
 	if err != nil {
 		s.internal(w, r, err)
 		return

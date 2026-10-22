@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/arshadm25/cto-delivery-planner/internal/auth"
+	"github.com/arshadm25/cto-delivery-planner/internal/planning"
 	"github.com/arshadm25/cto-delivery-planner/internal/store"
 )
 
@@ -39,6 +40,7 @@ type Config struct {
 type Server struct {
 	cfg   Config
 	store *store.Store
+	plan  *planning.Store
 	auth  *auth.Store
 	log   *slog.Logger
 	mux   *http.ServeMux
@@ -62,7 +64,7 @@ func New(cfg Config, st *store.Store, as *auth.Store, log *slog.Logger) *Server 
 		cfg.Now = time.Now
 	}
 	cfg.RedmineURL = strings.TrimRight(cfg.RedmineURL, "/")
-	s := &Server{cfg: cfg, store: st, auth: as, log: log, mux: http.NewServeMux(), login: newLimiter(10, 15*time.Minute)}
+	s := &Server{cfg: cfg, store: st, plan: &planning.Store{Pool: st.Pool}, auth: as, log: log, mux: http.NewServeMux(), login: newLimiter(10, 15*time.Minute)}
 	s.routes()
 	return s
 }
@@ -87,6 +89,26 @@ func (s *Server) routes() {
 
 	m.Handle("GET /api/v1/settings/rules", s.authed(s.handleGetRules))
 	m.Handle("PUT /api/v1/settings/rules", s.authed(s.require(auth.EditSettings, s.handlePutRules)))
+
+	m.Handle("GET /api/v1/settings/calendar", s.authed(s.handleGetCalendar))
+	m.Handle("PUT /api/v1/settings/calendar", s.authed(s.require(auth.EditSettings, s.handlePutCalendar)))
+
+	m.Handle("GET /api/v1/commitments", s.authed(s.handleListCommitments))
+	m.Handle("POST /api/v1/commitments", s.authed(s.require(auth.ProposeCommitments, s.handleProposeCommitment)))
+	m.Handle("POST /api/v1/commitments/{id}/decision", s.authed(s.require(auth.ApproveCommitments, s.handleDecideCommitment)))
+	m.Handle("POST /api/v1/commitments/{id}/delivered", s.authed(s.require(auth.ProposeCommitments, s.handleDeliveredCommitment)))
+
+	m.Handle("GET /api/v1/people", s.authed(s.handlePeople))
+	m.Handle("GET /api/v1/capacity-allocations", s.authed(s.handleListAllocations))
+	m.Handle("POST /api/v1/capacity-allocations", s.authed(s.require(auth.EditCapacity, s.handleSaveAllocation)))
+	m.Handle("PUT /api/v1/capacity-allocations/{id}", s.authed(s.require(auth.EditCapacity, s.handleSaveAllocation)))
+	m.Handle("DELETE /api/v1/capacity-allocations/{id}", s.authed(s.require(auth.EditCapacity, s.handleDeleteAllocation)))
+	m.Handle("POST /api/v1/capacity-allocations/{id}/approve", s.authed(s.require(auth.ApproveCapacity, s.handleApproveAllocation)))
+
+	m.Handle("GET /api/v1/workload", s.authed(s.handleWorkload))
+	m.Handle("GET /api/v1/projects/{id}/history", s.authed(s.handleHistory))
+	m.Handle("POST /api/v1/snapshots", s.authed(s.require(auth.EditSettings, s.handleTakeSnapshot)))
+	m.Handle("GET /api/v1/reports/weekly", s.authed(s.handleWeeklyReport))
 
 	m.Handle("GET /api/v1/admin/users", s.authed(s.require(auth.ManageUsers, s.handleListUsers)))
 	m.Handle("POST /api/v1/admin/users", s.authed(s.require(auth.ManageUsers, s.handleCreateUser)))
