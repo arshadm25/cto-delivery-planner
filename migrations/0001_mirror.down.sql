@@ -1,0 +1,11 @@
+DROP TABLE audit_events;
+DROP TABLE sync_reconciliation;
+DROP TABLE sync_checkpoints;
+DROP TABLE sync_runs;
+DROP TABLE redmine_time_entries;
+DROP TABLE redmine_issue_relations;
+DROP TABLE redmine_issues;
+DROP TABLE redmine_versions;
+DROP TABLE redmine_statuses;
+DROP TABLE redmine_users;
+DROP TABLE redmine_projects;
