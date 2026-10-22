@@ -1,0 +1,10 @@
+# Example for Caddy on the same host. Replace the hostname. Caddy obtains
+# and renews the TLS certificate.
+planner.example.com {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+	reverse_proxy 127.0.0.1:3000
+}

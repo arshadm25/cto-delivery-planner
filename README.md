@@ -4,23 +4,20 @@ A portfolio delivery dashboard for the CTO and delivery team, connected to Redmi
 
 Redmine stays the source of truth. The planner only reads from Redmine: it never creates, updates or deletes Redmine data. The Redmine client refuses any request that is not a GET.
 
-## Status
-
-Phase 1, discovery and baseline validation. What exists today:
+## What's here
 
 | Path | What it is |
 |---|---|
-| `cmd/redmine-discovery` | Read-only CLI that builds the Phase 1 baseline report |
-| `internal/redmine` | Read-only Redmine REST client: pagination, retries, timeouts |
-| `internal/discovery` | Counts, project hierarchy and data-gap checks behind the report |
-| `cmd/csv-compare` | Compares Redmine CSV exports with the discovery output, issue by issue |
-| `internal/csvcompare` | CSV parsing, field mapping and difference classification |
-| `docs/data-mapping.md` | How each CSV column maps to the Redmine API |
-| `config/scope.json`, `docs/scope.md` | Project IDs the planner covers, and why |
-| `docs/discovery.md` | How to run discovery and the CSV comparison on a trusted host |
-| `docs/redmine-environment.md` | Facts about the Redmine install, filled in during Phase 1 |
-
-The Next.js dashboard (`apps/web`), Go API and sync worker (`services/`) and PostgreSQL migrations come in later phases.
+| `cmd/redmine-discovery`, `cmd/csv-compare` | Phase 1 discovery and CSV comparison tools ([docs/discovery.md](docs/discovery.md)) |
+| `cmd/sync-worker`, `internal/syncer` | Full and incremental Redmine import into PostgreSQL ([docs/sync.md](docs/sync.md)) |
+| `cmd/api`, `internal/api` | REST API with login, roles and project-level access ([docs/dashboard.md](docs/dashboard.md)) |
+| `apps/web` | Next.js dashboard |
+| `internal/risks`, `internal/forecast` | Flag, health and forecast rules ([docs/forecasting.md](docs/forecasting.md)) |
+| `internal/redmine` | Read-only Redmine client |
+| `migrations` | PostgreSQL schema |
+| `deploy` | Docker Compose deployment, reverse-proxy examples, backup, restore and alert scripts ([docs/operations.md](docs/operations.md)) |
+| `config/scope.json` | In-scope Redmine project IDs ([docs/scope.md](docs/scope.md)) |
+| `cmd/devseed`, `internal/redminetest` | Fictional demo data and the fake Redmine used by tests |
 
 ## Rules
 
@@ -30,10 +27,13 @@ The Next.js dashboard (`apps/web`), Go API and sync worker (`services/`) and Pos
 
 ## Development
 
-Requires Go 1.24 or later.
+Requires Go 1.24+, Node 22 and Docker.
 
 ```bash
-make test        # unit tests
-make vet
-make fmt-check
+make up                 # local PostgreSQL
+make test-integration   # Go unit and database tests
+APP_ENV=development make devseed && make api   # API with fictional data
+cd apps/web && npm install && npm run dev       # dashboard on :3000
 ```
+
+See [docs/operations.md](docs/operations.md) to deploy, and [docs/security.md](docs/security.md) for the security review checklist.
