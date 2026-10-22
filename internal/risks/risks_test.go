@@ -104,3 +104,27 @@ func TestProjectHealth(t *testing.T) {
 		}
 	}
 }
+
+func TestAwaitingQASkipsDevelopmentFlags(t *testing.T) {
+	is := Issue{ID: 7, ProjectID: 9, StatusName: "Fixed Not Tested", PriorityName: "Normal",
+		DueDate: d("2026-10-01"), UpdatedOn: today.AddDate(0, 0, -30)}
+	got := kinds(IssueFlags([]Issue{is}, nil, Rules{Today: today}), 7)
+	for _, k := range []string{KindOverdue, KindMissingAssignee} {
+		if _, ok := got[k]; !ok {
+			t.Errorf("awaiting QA issue should keep %s: %v", k, got)
+		}
+	}
+	for _, k := range []string{KindStale, KindMissingEstimate} {
+		if _, ok := got[k]; ok {
+			t.Errorf("awaiting QA issue should not get %s", k)
+		}
+	}
+	// An explicit empty list turns the bucket off.
+	off := kinds(IssueFlags([]Issue{is}, nil, Rules{Today: today, AwaitingQAStatuses: []string{}}), 7)
+	if _, ok := off[KindStale]; !ok {
+		t.Errorf("with no awaiting QA statuses the issue is stale: %v", off)
+	}
+	if (Rules{}).AwaitingQA(Issue{StatusName: "fixed not tested", IsClosed: true}) {
+		t.Error("closed issue reported as awaiting QA")
+	}
+}

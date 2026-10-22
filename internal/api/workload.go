@@ -82,7 +82,8 @@ func (s *Server) buildWorkload(ctx context.Context, acc auth.Access, a *analysis
 		}
 		visible = append(visible, pr.ID)
 		for _, is := range a.d.ProjectIssues(pr.ID) {
-			if is.IsClosed {
+			// Work awaiting QA is not development load.
+			if is.IsClosed || a.rules.AwaitingQA(is) {
 				continue
 			}
 			if is.AssigneeID == nil {

@@ -43,6 +43,17 @@ Further rules:
 - **Capacity risk.** Raised when remaining effort exceeds approved capacity before the baseline.
 - **No approved baseline.** Gives a low data-gap flag, and the forecast status stays TBD.
 
+## Awaiting QA
+
+Some open Redmine statuses mean development is finished and the work is waiting for testing. At discovery (P1-12), 67% of open in-scope issues were in *Fixed Not Tested*. The CTO decided on 2026-10-22 that these issues count separately.
+
+- They stay open and are not delivered until Redmine closes them. Milestones still count them as open work.
+- They are left out of remaining development effort, estimate coverage, forecasts and workload.
+- They do not get stale, missing-estimate or over-estimate flags. They still get overdue, blocked, missing-owner and missing-date flags.
+- Each project shows how many issues are awaiting QA, and the issue list can be filtered to them.
+
+The statuses are set under **Settings → Rule settings**. The default is *Fixed Not Tested*, and an empty list turns the bucket off.
+
 ## Snapshots and history (P4-04, Q12)
 
 - **When.** The API takes one snapshot per project per day, and an admin or the CTO can take one on demand (`POST /api/v1/snapshots`).

@@ -45,7 +45,7 @@ export default function Overview() {
               <tr key={p.id} className="hover:bg-slate-50">
                 <td className="px-2 py-2"><Link className="font-medium text-slate-900 hover:underline" href={`/projects/${p.id}`}>{p.name}</Link></td>
                 <td className="px-2 py-2" title={p.health.reasons.join("; ")}><HealthBadge state={p.health.state} /></td>
-                <td className="px-2 py-2">{p.issues.open}</td>
+                <td className="px-2 py-2" title={`${p.issues.awaiting_qa} awaiting QA`}>{p.issues.open}{p.issues.awaiting_qa > 0 && <span className="text-xs text-slate-500"> ({p.issues.awaiting_qa} QA)</span>}</td>
                 <td className="px-2 py-2">{p.issues.overdue || ""}</td>
                 <td className="px-2 py-2">{p.issues.blocked || ""}</td>
                 <td className="px-2 py-2" title={`Remaining estimated: ${hours(p.remaining_estimated_hours)}`}>{pct(p.estimate_coverage)}</td>

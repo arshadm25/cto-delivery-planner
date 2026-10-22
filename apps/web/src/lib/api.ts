@@ -99,6 +99,7 @@ export interface ProjectSummary {
   issues: {
     total: number;
     open: number;
+    awaiting_qa: number;
     closed: number;
     overdue: number;
     blocked: number;

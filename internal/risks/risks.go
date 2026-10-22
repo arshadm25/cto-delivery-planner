@@ -63,6 +63,11 @@ type Rules struct {
 	// ReleaseKeywords mark milestones or trackers that gate delivery,
 	// such as QA, UAT, release and handover.
 	ReleaseKeywords []string `json:"release_keywords"`
+	// AwaitingQAStatuses are open status names meaning development is
+	// finished and the work waits for testing. Such issues stay open and
+	// undelivered, but are left out of remaining development effort and
+	// of the stale, missing-estimate and over-estimate flags.
+	AwaitingQAStatuses []string `json:"awaiting_qa_statuses"`
 }
 
 // DefaultRules are used until settings say otherwise. They are starting
@@ -74,6 +79,9 @@ func DefaultRules(today time.Time) Rules {
 		MilestoneWarnDays: 14,
 		HighPriorities:    []string{"High", "Urgent", "Immediate"},
 		ReleaseKeywords:   []string{"QA", "UAT", "Release", "Handover"},
+		// 67% of open in-scope issues were in this status at discovery
+		// (P1-12); the CTO chose to count them separately.
+		AwaitingQAStatuses: []string{"Fixed Not Tested"},
 	}
 }
 
@@ -91,7 +99,15 @@ func (r Rules) withDefaults() Rules {
 	if r.ReleaseKeywords == nil {
 		r.ReleaseKeywords = d.ReleaseKeywords
 	}
+	if r.AwaitingQAStatuses == nil {
+		r.AwaitingQAStatuses = d.AwaitingQAStatuses
+	}
 	return r
+}
+
+// AwaitingQA reports whether an open issue is waiting for testing.
+func (r Rules) AwaitingQA(is Issue) bool {
+	return !is.IsClosed && containsFold(r.withDefaults().AwaitingQAStatuses, is.StatusName)
 }
 
 // Severity orders flags. Critical and high affect project health; medium
@@ -188,6 +204,7 @@ func IssueFlags(issues []Issue, relations []Relation, rules Rules) []Flag {
 			continue
 		}
 		id := ptr(is.ID)
+		qa := rules.AwaitingQA(is)
 		add := func(kind string, sev Severity, title, evidence, action string) {
 			out = append(out, Flag{Kind: kind, Severity: sev, ProjectID: is.ProjectID, IssueID: id, VersionID: is.VersionID,
 				Title: title, Evidence: evidence, Action: action})
@@ -208,7 +225,7 @@ func IssueFlags(issues []Issue, relations []Relation, rules Rules) []Flag {
 				fmt.Sprintf("Due %s, status %s, %s done", is.DueDate.Format(time.DateOnly), is.StatusName, pct(is.DoneRatio)),
 				"Confirm a new date with the assignee or close it if the work is done.")
 		}
-		if n := daysBetween(is.UpdatedOn, rules.Today); n >= rules.StaleAfterDays {
+		if n := daysBetween(is.UpdatedOn, rules.Today); !qa && n >= rules.StaleAfterDays {
 			add(KindStale, Medium, fmt.Sprintf("#%d has had no update for %d days", is.ID, n),
 				fmt.Sprintf("Last updated %s; threshold %d days", is.UpdatedOn.Format(time.DateOnly), rules.StaleAfterDays),
 				"Ask the assignee for a status update.")
@@ -217,7 +234,7 @@ func IssueFlags(issues []Issue, relations []Relation, rules Rules) []Flag {
 			add(KindMissingAssignee, Medium, fmt.Sprintf("#%d has no assignee", is.ID), "Assignee is empty in Redmine",
 				"Assign an owner in Redmine.")
 		}
-		if is.Estimated == nil {
+		if is.Estimated == nil && !qa {
 			add(KindMissingEstimate, Low, fmt.Sprintf("#%d has no estimate", is.ID), "Estimated time is empty in Redmine",
 				"Add an estimate in Redmine so remaining effort can be calculated.")
 		}
@@ -225,7 +242,7 @@ func IssueFlags(issues []Issue, relations []Relation, rules Rules) []Flag {
 			add(KindMissingDueDate, Low, fmt.Sprintf("#%d has no due date or target version", is.ID),
 				"Neither due date nor target version is set", "Set a due date or a target version in Redmine.")
 		}
-		if is.Estimated != nil && is.Spent != nil && *is.Estimated > 0 && *is.Spent > *is.Estimated {
+		if !qa && is.Estimated != nil && is.Spent != nil && *is.Estimated > 0 && *is.Spent > *is.Estimated {
 			add(KindOverEstimate, Low, fmt.Sprintf("#%d has used more time than estimated", is.ID),
 				fmt.Sprintf("Spent %.1f h of %.1f h estimated", *is.Spent, *is.Estimated),
 				"Re-estimate the remaining work.")

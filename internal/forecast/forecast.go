@@ -82,6 +82,9 @@ type Input struct {
 	Today time.Time
 	// Issues in the forecast's scope (a project or one version), open and closed.
 	Issues []risks.Issue
+	// AwaitingQA marks open issues whose development is finished and that
+	// wait for testing. They are not remaining effort. Nil means none.
+	AwaitingQA func(risks.Issue) bool
 	// BlockerDue lists due dates of open issues outside the scope that block
 	// issues inside it.
 	BlockerDue []time.Time
@@ -140,10 +143,14 @@ func Compute(in Input) Result {
 		res.Assumptions = append(res.Assumptions, "Working calendar not confirmed; assuming the configured working days and hours per day")
 	}
 
-	open, estimated := 0, 0
+	open, estimated, awaitingQA := 0, 0, 0
 	var remaining float64
 	for _, is := range in.Issues {
 		if is.IsClosed {
+			continue
+		}
+		if in.AwaitingQA != nil && in.AwaitingQA(is) {
+			awaitingQA++
 			continue
 		}
 		open++
@@ -157,6 +164,11 @@ func Compute(in Input) Result {
 		}
 	}
 	res.Inputs["open_issues"] = open
+	res.Inputs["awaiting_qa_issues"] = awaitingQA
+	if awaitingQA > 0 {
+		res.Assumptions = append(res.Assumptions,
+			fmt.Sprintf("%d issue(s) awaiting QA are not counted as remaining development effort", awaitingQA))
+	}
 	res.Inputs["estimated_open_issues"] = estimated
 	var coverage float64
 	if open > 0 {
@@ -184,7 +196,11 @@ func Compute(in Input) Result {
 		res.Method = MethodNone
 		res.Confidence = "none"
 		res.Status = StatusTBD
-		res.Assumptions = append(res.Assumptions, "No open issues in scope; nothing to forecast until delivery is recorded")
+		why := "No open issues in scope; nothing to forecast until delivery is recorded"
+		if awaitingQA > 0 {
+			why = "All open issues are awaiting QA; delivery is recorded once they are tested and closed"
+		}
+		res.Assumptions = append(res.Assumptions, why)
 		return res
 	}
 
