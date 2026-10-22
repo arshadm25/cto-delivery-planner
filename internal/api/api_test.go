@@ -295,3 +295,28 @@ func TestSyncHealthEndpoint(t *testing.T) {
 		t.Fatalf("after failure %d", st)
 	}
 }
+
+func TestAwaitingQABucket(t *testing.T) {
+	e := newEnv(t)
+	cto := e.user("cto@example.test", auth.CTO)
+	rules := map[string]any{"stale_after_days": 14, "milestone_warn_days": 14, "awaiting_qa_statuses": []string{"New"}}
+	if st := cto.do("PUT", "/api/v1/settings/rules", rules, nil); st != 200 {
+		t.Fatalf("save rules %d", st)
+	}
+	var p struct{ Project ProjectSummary }
+	cto.do("GET", "/api/v1/projects/10", nil, &p)
+	if p.Project.Issues.Open == 0 || p.Project.Issues.AwaitingQA != p.Project.Issues.Open {
+		t.Fatalf("open %d awaiting QA %d", p.Project.Issues.Open, p.Project.Issues.AwaitingQA)
+	}
+	if p.Project.EstimateCoverage != nil || p.Project.Issues.OpenNoEstimate != 0 {
+		t.Fatalf("awaiting QA issues must not count as development work: %+v", p.Project)
+	}
+	var iss struct {
+		Total  int
+		Issues []IssueView
+	}
+	cto.do("GET", "/api/v1/projects/10/issues?status=awaiting_qa", nil, &iss)
+	if iss.Total != p.Project.Issues.AwaitingQA || !iss.Issues[0].AwaitingQA {
+		t.Fatalf("filter total %d", iss.Total)
+	}
+}

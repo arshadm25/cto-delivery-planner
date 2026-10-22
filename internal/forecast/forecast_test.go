@@ -103,3 +103,17 @@ func TestDeliveredKeepsActualSeparate(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
+
+func TestAwaitingQAIsNotRemainingEffort(t *testing.T) {
+	qa := func(is risks.Issue) bool { return is.StatusName == "Fixed Not Tested" }
+	fixed := risks.Issue{StatusName: "Fixed Not Tested", Estimated: f(30)}
+	issues := []risks.Issue{open(f(10)), open(f(10)), fixed, fixed}
+	r := Compute(Input{Today: today, Issues: issues, AwaitingQA: qa, WeeklyCapacity: 40, CapacityUntilBaseline: -1, Calendar: DefaultCalendar()})
+	if r.Method != MethodEffort || r.Inputs["scaled_remaining_hours"] != 20.0 || r.Inputs["awaiting_qa_issues"] != 2 || r.Inputs["open_issues"] != 2 {
+		t.Fatalf("%+v", r.Inputs)
+	}
+	only := Compute(Input{Today: today, Issues: []risks.Issue{fixed}, AwaitingQA: qa, WeeklyCapacity: 40, Calendar: DefaultCalendar()})
+	if only.Status != StatusTBD || only.Forecast != nil || only.Actual != nil {
+		t.Fatalf("only QA left must stay undelivered and TBD: %+v", only)
+	}
+}

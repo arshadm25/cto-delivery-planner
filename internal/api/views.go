@@ -30,8 +30,11 @@ type analysis struct {
 
 // IssueCounts are open/closed totals and data gaps for open issues.
 type IssueCounts struct {
-	Total          int `json:"total"`
-	Open           int `json:"open"`
+	Total int `json:"total"`
+	Open  int `json:"open"`
+	// AwaitingQA counts open issues whose development is finished and that
+	// wait for testing; they are included in Open.
+	AwaitingQA     int `json:"awaiting_qa"`
 	Closed         int `json:"closed"`
 	Overdue        int `json:"overdue"`
 	Blocked        int `json:"blocked"`
@@ -60,7 +63,7 @@ type ProjectSummary struct {
 	// It is null when no open issue has an estimate; see EstimateCoverage.
 	RemainingEstimatedHours *float64 `json:"remaining_estimated_hours"`
 	// EstimateCoverage is the share of open issues with an estimate, or
-	// null when nothing is open.
+	// null when nothing is open. Both leave out issues awaiting QA.
 	EstimateCoverage *float64       `json:"estimate_coverage"`
 	SpentHours       *float64       `json:"spent_hours"`
 	LastActivity     *time.Time     `json:"last_activity"`
@@ -172,15 +175,19 @@ func (s *Server) summarize(a *analysis, p *store.Project, issues []risks.Issue, 
 		if is.AssigneeID == nil {
 			ps.Issues.OpenUnassigned++
 		}
+		if is.DueDate == nil {
+			ps.Issues.OpenNoDate++
+		}
+		if a.rules.AwaitingQA(is) {
+			ps.Issues.AwaitingQA++
+			continue
+		}
 		if is.Estimated == nil {
 			ps.Issues.OpenNoEstimate++
 		} else {
 			estimated++
 			remaining += *is.Estimated
 			anyEst = true
-		}
-		if is.DueDate == nil {
-			ps.Issues.OpenNoDate++
 		}
 	}
 	for _, f := range a.flags[p.ID] {
@@ -194,8 +201,8 @@ func (s *Server) summarize(a *analysis, p *store.Project, issues []risks.Issue, 
 	if anyEst {
 		ps.RemainingEstimatedHours = &remaining
 	}
-	if ps.Issues.Open > 0 {
-		c := float64(estimated) / float64(ps.Issues.Open)
+	if dev := ps.Issues.Open - ps.Issues.AwaitingQA; dev > 0 {
+		c := float64(estimated) / float64(dev)
 		ps.EstimateCoverage = &c
 	}
 	if anySpent {
@@ -414,6 +421,7 @@ type IssueView struct {
 	VersionName *string  `json:"version_name"`
 	Flags       []string `json:"flags"`
 	RedmineURL  string   `json:"redmine_url,omitempty"`
+	AwaitingQA  bool     `json:"awaiting_qa"`
 }
 
 func (s *Server) issueURL(id int) string {
@@ -450,6 +458,10 @@ func (s *Server) handleIssues(w http.ResponseWriter, r *http.Request) {
 			if !is.IsClosed {
 				continue
 			}
+		case "awaiting_qa":
+			if !a.rules.AwaitingQA(is) {
+				continue
+			}
 		}
 		if search != "" && !strings.Contains(strings.ToLower(is.Subject), search) && strconv.Itoa(is.ID) != search {
 			continue
@@ -470,7 +482,7 @@ func (s *Server) handleIssues(w http.ResponseWriter, r *http.Request) {
 		if flag != "" && !contains(kinds, flag) {
 			continue
 		}
-		v := IssueView{Issue: is, Flags: kinds, RedmineURL: s.issueURL(is.ID)}
+		v := IssueView{Issue: is, Flags: kinds, RedmineURL: s.issueURL(is.ID), AwaitingQA: a.rules.AwaitingQA(is)}
 		if v.Flags == nil {
 			v.Flags = []string{}
 		}

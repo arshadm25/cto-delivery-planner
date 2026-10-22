@@ -158,7 +158,7 @@ func (s *Server) deliveryFor(a *analysis, projectID int, issues []risks.Issue, i
 			blockerDue = append(blockerDue, *b.DueDate)
 		}
 	}
-	in := forecast.Input{Today: a.rules.Today, Issues: issues, BlockerDue: blockerDue, WeeklyCapacity: weekly,
+	in := forecast.Input{Today: a.rules.Today, Issues: issues, AwaitingQA: a.rules.AwaitingQA, BlockerDue: blockerDue, WeeklyCapacity: weekly,
 		CapacityUntilBaseline: -1, Calendar: a.calendar}
 	var src *string
 	var cid *int64

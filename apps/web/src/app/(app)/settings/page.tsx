@@ -10,6 +10,7 @@ interface Rules {
   milestone_warn_days: number;
   high_priorities: string[];
   release_keywords: string[];
+  awaiting_qa_statuses: string[];
 }
 
 interface Calendar {
@@ -102,6 +103,9 @@ export default function SettingsPage() {
           </label>
           <label className="block">Release-step keywords in milestone names
             <input value={form.release_keywords.join(", ")} onChange={(e) => setForm({ ...form, release_keywords: list(e.target.value) })} className="mt-1 w-full rounded border px-2 py-1" />
+          </label>
+          <label className="block">Statuses meaning &quot;awaiting QA&quot; (comma separated, as named in Redmine). These issues stay open but are not counted as remaining development work or flagged as stale.
+            <input value={(form.awaiting_qa_statuses ?? []).join(", ")} onChange={(e) => setForm({ ...form, awaiting_qa_statuses: list(e.target.value) })} className="mt-1 w-full rounded border px-2 py-1" />
           </label>
           <button className="rounded bg-slate-900 px-3 py-1.5 text-white">Save</button>
           {msg && <p className="text-emerald-700">{msg}</p>}

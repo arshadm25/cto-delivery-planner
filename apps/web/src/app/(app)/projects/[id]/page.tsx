@@ -34,13 +34,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       <RolesCard project={p} onSaved={reload} />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
         <Stat label="Open" value={p.issues.open} />
+        <Stat label="Awaiting QA" value={p.issues.awaiting_qa} />
         <Stat label="Closed" value={p.issues.closed} />
         <Stat label="Overdue" value={p.issues.overdue} tone={p.issues.overdue ? "warn" : undefined} />
         <Stat label="Blocked" value={p.issues.blocked} tone={p.issues.blocked ? "bad" : undefined} />
         <Stat label="Remaining estimate" value={hours(p.remaining_estimated_hours)} />
-        <Stat label="Open issues estimated" value={pct(p.estimate_coverage)} />
+        <Stat label="Open dev issues estimated" value={pct(p.estimate_coverage)} />
       </div>
 
       <DeliveryPanel project={p} milestones={ms.data?.milestones ?? []} onChange={() => { reload(); ms.reload(); }} />
@@ -142,7 +143,7 @@ function IssuesCard({ projectId }: { projectId: string }) {
     <Card title="Issues">
       <div className="mb-3 flex flex-wrap gap-2 text-sm">
         <select aria-label="Status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="rounded border px-2 py-1">
-          <option value="open">Open</option><option value="closed">Closed</option><option value="all">All</option>
+          <option value="open">Open</option><option value="awaiting_qa">Awaiting QA</option><option value="closed">Closed</option><option value="all">All</option>
         </select>
         <select aria-label="Flag" value={flag} onChange={(e) => { setFlag(e.target.value); setPage(1); }} className="rounded border px-2 py-1">
           <option value="">Any flag</option>
