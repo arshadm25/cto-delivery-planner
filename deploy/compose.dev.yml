@@ -1,0 +1,20 @@
+# Local development database only. Start with `make up`.
+# The port is bound to 127.0.0.1 so the database is not exposed on the network.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: planner
+      POSTGRES_PASSWORD: planner-dev-only
+      POSTGRES_DB: cto_planner
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planner -d cto_planner"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  pgdata-dev:

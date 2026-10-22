@@ -11,6 +11,21 @@ permissions:
 jobs:
   go:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: planner
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U planner"
+          --health-interval 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://planner:ci-only@localhost:5432/postgres?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -20,5 +35,5 @@ jobs:
         run: make fmt-check
       - name: vet
         run: make vet
-      - name: test
-        run: go test -race ./...
+      - name: test (unit and integration)
+        run: go test -race -count=1 ./...
