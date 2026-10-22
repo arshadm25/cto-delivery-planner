@@ -73,6 +73,7 @@ func (s *Server) routes() {
 	m := s.mux
 	m.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 	m.HandleFunc("GET /readyz", s.ready)
+	m.HandleFunc("GET /health/sync", s.syncHealth)
 
 	m.HandleFunc("POST /api/v1/auth/login", s.handleLogin)
 	m.HandleFunc("POST /api/v1/auth/logout", s.handleLogout)
@@ -165,6 +166,38 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write([]byte("ok\n"))
+}
+
+// syncHealth is for monitoring. It answers 503 when the newest run failed
+// or no run has succeeded within SyncStaleAfter, and exposes no project data.
+func (s *Server) syncHealth(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	var lastOK *time.Time
+	var latest *string
+	err := s.store.Pool.QueryRow(ctx, `SELECT (SELECT max(finished_at) FROM sync_runs WHERE outcome = 'succeeded'),
+		(SELECT outcome FROM sync_runs WHERE outcome <> 'running' ORDER BY id DESC LIMIT 1)`).Scan(&lastOK, &latest)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "error", "problem": "database unavailable"})
+		return
+	}
+	out := map[string]any{"status": "ok", "last_success": lastOK, "latest_outcome": latest, "stale_after": s.cfg.SyncStaleAfter.String()}
+	var problems []string
+	if lastOK == nil {
+		problems = append(problems, "no successful sync yet")
+	} else if age := s.cfg.Now().Sub(*lastOK); age > s.cfg.SyncStaleAfter {
+		problems = append(problems, "last successful sync is "+age.Round(time.Minute).String()+" old")
+	}
+	if latest != nil && *latest != "succeeded" {
+		problems = append(problems, "latest sync run "+*latest)
+	}
+	if len(problems) > 0 {
+		out["status"] = "failing"
+		out["problems"] = problems
+		writeJSON(w, http.StatusServiceUnavailable, out)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 type ctxKey int

@@ -1,0 +1,100 @@
+# Production-style deployment (P5-02). Put HTTPS in front with your
+# existing reverse proxy; see deploy/reverse-proxy/. Only the web service
+# publishes a port, and only on 127.0.0.1 so the proxy on the same host
+# reaches it. PostgreSQL stays on the private network.
+#
+# Secrets live in /etc/cto-planner/planner.env on the host (mode 600,
+# owned by root), never in this repository or in an image:
+#   REDMINE_URL, REDMINE_API_KEY, POSTGRES_PASSWORD, DATABASE_URL
+# See docs/operations.md.
+
+name: cto-planner
+
+x-hardening: &hardening
+  restart: unless-stopped
+  read_only: true
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    env_file: [/etc/cto-planner/planner.env]
+    environment:
+      POSTGRES_USER: planner
+      POSTGRES_DB: cto_planner
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [private]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planner -d cto_planner"]
+      interval: 10s
+      retries: 10
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  api:
+    <<: *hardening
+    build: { context: .., dockerfile: deploy/go.Dockerfile }
+    image: cto-planner-go:${PLANNER_VERSION:-local}
+    env_file: [/etc/cto-planner/planner.env]
+    environment:
+      API_ADDR: ":8080"
+      APP_ENV: production
+      COOKIE_SECURE: "true"
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [private]
+    healthcheck:
+      test: ["CMD", "/app/probe", "http://localhost:8080/readyz"]
+      interval: 30s
+      retries: 3
+
+  worker:
+    <<: *hardening
+    build: { context: .., dockerfile: deploy/go.Dockerfile }
+    image: cto-planner-go:${PLANNER_VERSION:-local}
+    entrypoint: ["/app/sync-worker", "-env-file", "/dev/null"]
+    env_file: [/etc/cto-planner/planner.env]
+    environment:
+      SCOPE_FILE: /app/config/scope.json
+      WORKER_HEALTH_ADDR: ":8081"
+    volumes:
+      # Override the scope baked into the image without a rebuild.
+      - ../config/scope.json:/app/config/scope.json:ro
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [private, egress]
+    healthcheck:
+      test: ["CMD", "/app/probe", "http://localhost:8081/readyz"]
+      interval: 30s
+      retries: 3
+
+  web:
+    <<: *hardening
+    build: { context: ../apps/web, args: { API_INTERNAL_URL: "http://api:8080" } }
+    image: cto-planner-web:${PLANNER_VERSION:-local}
+    tmpfs: ["/app/.next/cache"]
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [private, edge]
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+
+networks:
+  # No route to the internet: database, API and web.
+  private:
+    internal: true
+  # Only the worker needs to reach Redmine.
+  egress: {}
+  # Lets the host's reverse proxy reach the web port.
+  edge: {}
+
+volumes:
+  pgdata:

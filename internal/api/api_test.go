@@ -280,3 +280,18 @@ func TestIssueFlagsLinkToRedmine(t *testing.T) {
 		}
 	}
 }
+
+func TestSyncHealthEndpoint(t *testing.T) {
+	e := newEnv(t)
+	c := e.anon()
+	if st := c.do("GET", "/health/sync", nil, nil); st != 200 {
+		t.Fatalf("healthy %d", st)
+	}
+	e.fake.Lock()
+	e.fake.FailProject = 10
+	e.fake.Unlock()
+	e.sy.Run(context.Background(), syncer.Full)
+	if st := c.do("GET", "/health/sync", nil, nil); st != 503 {
+		t.Fatalf("after failure %d", st)
+	}
+}

@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+!.env.example
+apps/web/node_modules
+apps/web/.next
+bin
+discovery-out
+compare-out
+exports
+out

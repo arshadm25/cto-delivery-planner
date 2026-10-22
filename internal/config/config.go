@@ -3,11 +3,15 @@
 package config
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -47,13 +51,82 @@ func Bool(name string, def bool) bool {
 	return def
 }
 
-// Logger returns a JSON logger at LOG_LEVEL (debug, info, warn, error).
+var (
+	secretsMu sync.RWMutex
+	secrets   []string
+)
+
+// RegisterSecret makes the logger replace this exact value wherever it
+// appears in a log line. Values shorter than 8 characters are ignored.
+func RegisterSecret(v string) {
+	if len(v) < 8 {
+		return
+	}
+	secretsMu.Lock()
+	secrets = append(secrets, v)
+	secretsMu.Unlock()
+}
+
+var sensitiveKey = regexp.MustCompile(`(?i)(password|passwd|secret|token|api[_-]?key|authorization|cookie)`)
+
+// Redact scrubs registered secret values from s.
+func Redact(s string) string {
+	secretsMu.RLock()
+	defer secretsMu.RUnlock()
+	for _, v := range secrets {
+		s = strings.ReplaceAll(s, v, "[redacted]")
+	}
+	return s
+}
+
+func redactAttr(_ []string, a slog.Attr) slog.Attr {
+	if sensitiveKey.MatchString(a.Key) {
+		return slog.String(a.Key, "[redacted]")
+	}
+	switch a.Value.Kind() {
+	case slog.KindString:
+		return slog.String(a.Key, Redact(a.Value.String()))
+	case slog.KindAny:
+		if err, ok := a.Value.Any().(error); ok {
+			return slog.String(a.Key, Redact(err.Error()))
+		}
+	}
+	return a
+}
+
+// redactHandler also scrubs the message itself.
+type redactHandler struct{ slog.Handler }
+
+func (h redactHandler) Handle(ctx context.Context, r slog.Record) error {
+	r.Message = Redact(r.Message)
+	return h.Handler.Handle(ctx, r)
+}
+
+func (h redactHandler) WithAttrs(as []slog.Attr) slog.Handler {
+	return redactHandler{h.Handler.WithAttrs(as)}
+}
+
+func (h redactHandler) WithGroup(name string) slog.Handler {
+	return redactHandler{h.Handler.WithGroup(name)}
+}
+
+// Logger returns a JSON logger at LOG_LEVEL (debug, info, warn, error) that
+// redacts sensitive attribute names and registered secret values. The
+// Redmine key and the database URL are registered automatically.
 func Logger(service string) *slog.Logger {
+	return NewLogger(os.Stdout, service)
+}
+
+// NewLogger is Logger writing to w.
+func NewLogger(w io.Writer, service string) *slog.Logger {
+	RegisterSecret(os.Getenv("REDMINE_API_KEY"))
+	RegisterSecret(os.Getenv("DATABASE_URL"))
 	var level slog.Level
 	if err := level.UnmarshalText([]byte(String("LOG_LEVEL", "info"))); err != nil {
 		level = slog.LevelInfo
 	}
-	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})).With("service", service)
+	h := slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level, ReplaceAttr: redactAttr})
+	return slog.New(redactHandler{h}).With("service", service)
 }
 
 // Fatal logs and exits.
