@@ -22,6 +22,8 @@ export function can(me: Me, permission: string) {
 const NAV = [
   { href: "/", label: "Overview" },
   { href: "/risks", label: "Risks" },
+  { href: "/workload", label: "Workload" },
+  { href: "/reports/weekly", label: "Weekly report" },
   { href: "/sync", label: "Sync status" },
 ];
 
@@ -33,6 +35,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   if (error || !me) return <div className="p-6"><ErrorBox error={error} /></div>;
 
   const nav = [...NAV];
+  if (me.permissions.includes("edit_capacity")) nav.splice(3, 0, { href: "/capacity", label: "Capacity" });
   if (me.permissions.includes("edit_settings")) nav.push({ href: "/settings", label: "Settings" });
   if (me.permissions.includes("manage_users")) nav.push({ href: "/admin/users", label: "Users" });
 
