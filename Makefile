@@ -1,4 +1,4 @@
-.PHONY: api devseed web-e2e build test test-integration vet fmt-check discovery auth-check up down migrate sync-full sync-incremental
+.PHONY: api devseed web-e2e build test test-integration vet fmt-check discovery auth-check up down migrate sync-full sync-incremental deploy-build deploy-up backup
 
 DEV_COMPOSE = docker compose -f deploy/compose.dev.yml
 # Integration tests create and drop their own databases on this server.
@@ -58,3 +58,15 @@ devseed:
 # Needs a throwaway database in E2E_DATABASE_URL.
 web-e2e:
 	cd apps/web && npx playwright test
+
+# Production stack on this host; secrets come from /etc/cto-planner/planner.env.
+DEPLOY = docker compose -f deploy/docker-compose.yml
+
+deploy-build:
+	$(DEPLOY) build
+
+deploy-up:
+	$(DEPLOY) up -d
+
+backup:
+	deploy/scripts/backup.sh
