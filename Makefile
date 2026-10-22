@@ -1,4 +1,4 @@
-.PHONY: build test test-integration vet fmt-check discovery auth-check up down migrate sync-full sync-incremental
+.PHONY: api devseed web-e2e build test test-integration vet fmt-check discovery auth-check up down migrate sync-full sync-incremental
 
 DEV_COMPOSE = docker compose -f deploy/compose.dev.yml
 # Integration tests create and drop their own databases on this server.
@@ -8,6 +8,7 @@ build:
 	go build -o bin/redmine-discovery ./cmd/redmine-discovery
 	go build -o bin/csv-compare ./cmd/csv-compare
 	go build -o bin/sync-worker ./cmd/sync-worker
+	go build -o bin/api ./cmd/api
 
 # Unit tests only; database tests skip without TEST_DATABASE_URL.
 test:
@@ -45,3 +46,15 @@ auth-check: build
 
 discovery: build
 	./bin/redmine-discovery -out discovery-out
+
+# Local API over plain http.
+api: build
+	COOKIE_SECURE=false ./bin/api
+
+# Fictional demo data; refuses to run unless APP_ENV=development.
+devseed:
+	go run ./cmd/devseed
+
+# Needs a throwaway database in E2E_DATABASE_URL.
+web-e2e:
+	cd apps/web && npx playwright test
