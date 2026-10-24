@@ -158,7 +158,10 @@ func (s *Store) load(ctx context.Context, runID int64) (*Dataset, error) {
 			err := r.Scan(&v.ID, &v.ProjectID, &v.Name, &v.Status, &v.Due)
 			return v, err
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		return loadPlans(ctx, tx, d)
 	})
 	if err != nil {
 		return nil, err
@@ -173,6 +176,80 @@ func (s *Store) load(ctx context.Context, runID int64) (*Dataset, error) {
 		d.VersionByID[d.Versions[i].ID] = &d.Versions[i]
 	}
 	return d, nil
+}
+
+// loadPlans adds planner milestones as versions with negative IDs and
+// replaces Redmine values with the planner's where an issue has them.
+func loadPlans(ctx context.Context, tx pgx.Tx, d *Dataset) error {
+	rows, err := tx.Query(ctx, `SELECT -id, project_redmine_id, name, status, due_date FROM planner_milestones
+		ORDER BY due_date NULLS LAST, id`)
+	if err != nil {
+		return err
+	}
+	ms, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (risks.Version, error) {
+		v := risks.Version{Planner: true}
+		err := r.Scan(&v.ID, &v.ProjectID, &v.Name, &v.Status, &v.Due)
+		return v, err
+	})
+	if err != nil {
+		return err
+	}
+	d.Versions = append(d.Versions, ms...)
+
+	rows, err = tx.Query(ctx, `SELECT p.issue_redmine_id, p.estimated_hours::float8, p.due_date, p.assignee_redmine_id, u.name, p.version_id
+		FROM issue_plans p LEFT JOIN redmine_users u ON u.redmine_id = p.assignee_redmine_id`)
+	if err != nil {
+		return err
+	}
+	type plan struct {
+		est      *float64
+		due      *time.Time
+		assignee *int
+		name     *string
+		version  *int
+	}
+	plans := map[int]plan{}
+	_, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (int, error) {
+		var id int
+		var p plan
+		err := r.Scan(&id, &p.est, &p.due, &p.assignee, &p.name, &p.version)
+		plans[id] = p
+		return id, err
+	})
+	if err != nil {
+		return err
+	}
+	for i := range d.Issues {
+		pl, ok := plans[d.Issues[i].ID]
+		if !ok {
+			continue
+		}
+		is := &d.Issues[i]
+		set := func(field string, redmine any) {
+			if is.RedmineValues == nil {
+				is.RedmineValues = map[string]any{}
+			}
+			is.Planned = append(is.Planned, field)
+			is.RedmineValues[field] = redmine
+		}
+		if pl.est != nil {
+			set("estimated_hours", is.Estimated)
+			is.Estimated = pl.est
+		}
+		if pl.due != nil {
+			set("due_date", is.DueDate)
+			is.DueDate = pl.due
+		}
+		if pl.assignee != nil {
+			set("assignee_id", is.AssigneeID)
+			is.AssigneeID, is.AssigneeName = pl.assignee, pl.name
+		}
+		if pl.version != nil {
+			set("version_id", is.VersionID)
+			is.VersionID = pl.version
+		}
+	}
+	return nil
 }
 
 // ProjectIssues returns the issues of one project.

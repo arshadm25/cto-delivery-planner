@@ -7,6 +7,8 @@ import { ago, date, hours, pct, tbd } from "@/lib/format";
 import { can, useMe } from "@/components/Shell";
 import { Card, ErrorBox, FlagChip, HealthBadge, Loading, Pager, SeverityBadge, Stat, Table } from "@/components/ui";
 import { DeliveryPanel } from "@/components/DeliveryPanel";
+import { IssuesCard } from "@/components/IssueEditor";
+import { MilestonesCard } from "@/components/MilestoneEditor";
 
 interface ProjectResponse {
   project: ProjectSummary;
@@ -67,24 +69,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         </Card>
       </div>
 
-      <Card title="Milestones">
-        {ms.error && <ErrorBox error={ms.error} />}
-        <Table head={["Milestone", "Due", "Status", "Open / total", "Remaining estimate", "Baseline", "Flags"]}>
-          {(ms.data?.milestones ?? []).map((m) => (
-            <tr key={m.id}>
-              <td className="px-2 py-2">{m.redmine_url ? <a className="hover:underline" href={m.redmine_url} target="_blank" rel="noreferrer">{m.name}</a> : m.name}</td>
-              <td className="px-2 py-2">{date(m.due_date)}</td>
-              <td className="px-2 py-2">{m.status}</td>
-              <td className="px-2 py-2">{m.open} / {m.total}</td>
-              <td className="px-2 py-2">{hours(m.remaining_estimated_hours)}{m.open_no_estimate ? ` (+${m.open_no_estimate} unestimated)` : ""}</td>
-              <td className="px-2 py-2">{m.commitment?.status === "approved" ? date(m.commitment.baseline_date) : "TBD"}</td>
-              <td className="px-2 py-2 space-x-1">{m.flags.map((f, i) => <FlagChip key={i} kind={f.kind} />)}</td>
-            </tr>
-          ))}
-        </Table>
-      </Card>
-
-      <IssuesCard projectId={id} />
+      <MilestonesCard projectId={p.id} milestones={ms.data?.milestones ?? []} error={ms.error} onChange={() => { reload(); ms.reload(); }} />
+      <IssuesCard projectId={p.id} milestones={ms.data?.milestones ?? []} onChange={() => { reload(); ms.reload(); }} />
     </div>
   );
 }
@@ -125,52 +111,5 @@ function RolesCard({ project, onSaved }: { project: ProjectSummary; onSaved: () 
         </>
       )}
     </div>
-  );
-}
-
-function IssuesCard({ projectId }: { projectId: string }) {
-  const [status, setStatus] = useState("open");
-  const [flag, setFlag] = useState("");
-  const [q, setQ] = useState("");
-  const [sort, setSort] = useState("id");
-  const [page, setPage] = useState(1);
-  const qs = new URLSearchParams({ status, page: String(page), per_page: "50", sort });
-  if (flag) qs.set("flag", flag);
-  if (q) qs.set("q", q);
-  const { data, error } = useApi<{ issues: Issue[]; total: number; page: number; per_page: number }>(`/projects/${projectId}/issues?${qs}`);
-
-  return (
-    <Card title="Issues">
-      <div className="mb-3 flex flex-wrap gap-2 text-sm">
-        <select aria-label="Status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="rounded border px-2 py-1">
-          <option value="open">Open</option><option value="awaiting_qa">Awaiting QA</option><option value="closed">Closed</option><option value="all">All</option>
-        </select>
-        <select aria-label="Flag" value={flag} onChange={(e) => { setFlag(e.target.value); setPage(1); }} className="rounded border px-2 py-1">
-          <option value="">Any flag</option>
-          {Object.entries(FLAG_LABEL).filter(([k]) => !k.startsWith("milestone") && !["forecast_after_baseline", "capacity_risk", "no_baseline", "release_readiness"].includes(k))
-            .map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} className="rounded border px-2 py-1">
-          <option value="id">By ID</option><option value="due">By due date</option><option value="updated">Recently updated</option>
-        </select>
-        <input aria-label="Search" placeholder="Search subject or #ID" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} className="rounded border px-2 py-1" />
-      </div>
-      <ErrorBox error={error} />
-      <Table head={["#", "Subject", "Status", "Assignee", "Due", "Estimate", "Spent", "Flags"]}>
-        {(data?.issues ?? []).map((is) => (
-          <tr key={is.id}>
-            <td className="px-2 py-2">{is.redmine_url ? <a className="text-sky-700 hover:underline" href={is.redmine_url} target="_blank" rel="noreferrer">{is.id}</a> : is.id}</td>
-            <td className="px-2 py-2">{is.subject}</td>
-            <td className="px-2 py-2">{is.status}</td>
-            <td className="px-2 py-2">{is.assignee_name ?? "TBD"}</td>
-            <td className="px-2 py-2">{date(is.due_date)}</td>
-            <td className="px-2 py-2">{hours(is.estimated_hours)}</td>
-            <td className="px-2 py-2">{hours(is.spent_hours)}</td>
-            <td className="px-2 py-2 space-x-1">{is.flags.map((f) => <FlagChip key={f} kind={f} />)}</td>
-          </tr>
-        ))}
-      </Table>
-      {data && <Pager page={data.page} perPage={data.per_page} total={data.total} onPage={setPage} />}
-    </Card>
   );
 }

@@ -214,6 +214,7 @@ type Allocation struct {
 	ID             int64           `json:"id"`
 	PersonID       *int            `json:"person_id"`
 	PersonName     *string         `json:"person_name"`
+	TeamID         *int64          `json:"team_id"`
 	TeamName       *string         `json:"team_name"`
 	PeriodStart    time.Time       `json:"period_start"`
 	PeriodEnd      time.Time       `json:"period_end"`
@@ -229,6 +230,7 @@ type Allocation struct {
 // AllocationInput creates or replaces an allocation.
 type AllocationInput struct {
 	PersonID       *int            `json:"person_id"`
+	TeamID         *int64          `json:"team_id"`
 	TeamName       *string         `json:"team_name"`
 	PeriodStart    string          `json:"period_start"`
 	PeriodEnd      string          `json:"period_end"`
@@ -238,8 +240,17 @@ type AllocationInput struct {
 }
 
 func (in *AllocationInput) validate() (time.Time, time.Time, error) {
-	if (in.PersonID == nil) == (in.TeamName == nil || strings.TrimSpace(*in.TeamName) == "") {
-		return time.Time{}, time.Time{}, invalid("set exactly one of person_id or team_name")
+	if in.TeamName != nil && strings.TrimSpace(*in.TeamName) == "" {
+		in.TeamName = nil
+	}
+	set := 0
+	for _, ok := range []bool{in.PersonID != nil, in.TeamID != nil, in.TeamName != nil} {
+		if ok {
+			set++
+		}
+	}
+	if set != 1 {
+		return time.Time{}, time.Time{}, invalid("set exactly one of person_id, team_id or team_name")
 	}
 	start, err1 := time.Parse(time.DateOnly, in.PeriodStart)
 	end, err2 := time.Parse(time.DateOnly, in.PeriodEnd)
@@ -270,18 +281,27 @@ func (s *Store) SaveAllocation(ctx context.Context, by Actor, id int64, in Alloc
 		return 0, err
 	}
 	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if in.TeamID != nil {
+			var known bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM planner_teams WHERE id = $1)`, *in.TeamID).Scan(&known); err != nil {
+				return err
+			}
+			if !known {
+				return invalid("unknown team")
+			}
+		}
 		action := "update"
 		if id == 0 {
 			action = "create"
 			if err := tx.QueryRow(ctx, `INSERT INTO capacity_allocations (person_redmine_id, team_name, period_start, period_end,
-					available_hours, assumptions, status, created_by) VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7) RETURNING id`,
-				in.PersonID, in.TeamName, start, end, in.AvailableHours, in.Assumptions, by.ID).Scan(&id); err != nil {
+					available_hours, assumptions, status, created_by, team_id) VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7, $8) RETURNING id`,
+				in.PersonID, in.TeamName, start, end, in.AvailableHours, in.Assumptions, by.ID, in.TeamID).Scan(&id); err != nil {
 				return err
 			}
 		} else {
 			tag, err := tx.Exec(ctx, `UPDATE capacity_allocations SET person_redmine_id = $2, team_name = $3, period_start = $4,
-				period_end = $5, available_hours = $6, assumptions = $7, status = 'draft', approved_by = NULL, approved_at = NULL
-				WHERE id = $1`, id, in.PersonID, in.TeamName, start, end, in.AvailableHours, in.Assumptions)
+				period_end = $5, available_hours = $6, assumptions = $7, team_id = $8, status = 'draft', approved_by = NULL, approved_at = NULL
+				WHERE id = $1`, id, in.PersonID, in.TeamName, start, end, in.AvailableHours, in.Assumptions, in.TeamID)
 			if err != nil {
 				return err
 			}
@@ -334,17 +354,17 @@ func (s *Store) DeleteAllocation(ctx context.Context, by Actor, id int64) error 
 
 // Allocations returns allocations overlapping [from, to].
 func (s *Store) Allocations(ctx context.Context, from, to time.Time) ([]Allocation, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT a.id, a.person_redmine_id, u.name, a.team_name, a.period_start, a.period_end,
+	rows, err := s.Pool.Query(ctx, `SELECT a.id, a.person_redmine_id, u.name, a.team_id, COALESCE(t.name, a.team_name), a.period_start, a.period_end,
 			a.available_hours::float8, a.assumptions, a.status, cu.display_name, au.display_name, a.approved_at
 		FROM capacity_allocations a JOIN app_users cu ON cu.id = a.created_by LEFT JOIN app_users au ON au.id = a.approved_by
-		LEFT JOIN redmine_users u ON u.redmine_id = a.person_redmine_id
+		LEFT JOIN redmine_users u ON u.redmine_id = a.person_redmine_id LEFT JOIN planner_teams t ON t.id = a.team_id
 		WHERE a.period_end >= $1 AND a.period_start <= $2 ORDER BY a.period_start, a.id`, from, to)
 	if err != nil {
 		return nil, err
 	}
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Allocation, error) {
 		var a Allocation
-		err := r.Scan(&a.ID, &a.PersonID, &a.PersonName, &a.TeamName, &a.PeriodStart, &a.PeriodEnd, &a.AvailableHours,
+		err := r.Scan(&a.ID, &a.PersonID, &a.PersonName, &a.TeamID, &a.TeamName, &a.PeriodStart, &a.PeriodEnd, &a.AvailableHours,
 			&a.Assumptions, &a.Status, &a.CreatedBy, &a.ApprovedBy, &a.ApprovedAt)
 		a.Projects = map[int]float64{}
 		return a, err
