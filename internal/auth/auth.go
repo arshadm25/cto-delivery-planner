@@ -61,7 +61,7 @@ const (
 )
 
 var grants = map[Role][]Permission{
-	Admin:          {ManageUsers, EditSettings, EditProjectRoles},
+	Admin:          {ManageUsers, EditSettings, EditProjectRoles, EditCapacity, PlanWork},
 	CTO:            {EditSettings, EditProjectRoles, ProposeCommitments, ApproveCommitments, EditCapacity, ApproveCapacity, PlanWork},
 	ProjectManager: {ProposeCommitments, EditCapacity, PlanWork},
 	TechLead:       {EditCapacity, PlanWork},

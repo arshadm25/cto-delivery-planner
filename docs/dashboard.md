@@ -28,7 +28,7 @@ PLANNER_NEW_PASSWORD='…' ./bin/api -create-user you@company.example -name "You
 
 | Role | Sees | Can change |
 |---|---|---|
-| Administrator | All in-scope projects | Users and project access, settings, project owner and tech lead |
+| Administrator | All in-scope projects | Users and project access, settings, project owner and tech lead, capacity and teams, plan issues and milestones |
 | CTO | All in-scope projects | Settings, project owner and tech lead, commitments (approve), capacity (approve), plan issues and milestones |
 | Project manager | Assigned projects | Propose commitments, capacity and teams, plan issues and milestones |
 | Tech lead | Assigned projects | Capacity and teams, plan issues and milestones |

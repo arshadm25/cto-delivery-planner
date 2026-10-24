@@ -56,7 +56,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   if (error || !me) return <div className="p-6"><ErrorBox error={error} /></div>;
 
   const primary = [...PRIMARY];
-  if (me.permissions.includes("edit_capacity")) primary.splice(3, 0, { href: "/capacity", label: "Capacity", icon: "capacity" });
+  // Everyone can see capacity and teams; only some roles can change them.
+  primary.splice(3, 0, { href: "/capacity", label: "Capacity", icon: "capacity" });
   const admin: NavItem[] = [{ href: "/sync", label: "Sync status", icon: "sync" }];
   if (me.permissions.includes("edit_settings")) admin.push({ href: "/settings", label: "Settings", icon: "settings" });
   if (me.permissions.includes("manage_users")) admin.push({ href: "/admin/users", label: "Users", icon: "users" });
