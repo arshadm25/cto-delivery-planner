@@ -320,3 +320,40 @@ func TestAwaitingQABucket(t *testing.T) {
 		t.Fatalf("filter total %d", iss.Total)
 	}
 }
+
+func TestSubprojectRollup(t *testing.T) {
+	e := newEnv(t)
+	cto := e.user("cto@example.test", auth.CTO)
+	var p struct{ Projects []ProjectView }
+	cto.do("GET", "/api/v1/portfolio/summary", nil, &p)
+	byID := map[int]ProjectView{}
+	for _, v := range p.Projects {
+		byID[v.ID] = v
+	}
+	parent, child := byID[10], byID[11]
+	if len(parent.SubprojectIDs) != 1 || parent.SubprojectIDs[0] != 11 || parent.Rollup == nil {
+		t.Fatalf("parent %+v %+v", parent.SubprojectIDs, parent.Rollup)
+	}
+	if parent.Rollup.Open != parent.Issues.Open+child.Issues.Open || parent.Rollup.Closed != parent.Issues.Closed+child.Issues.Closed {
+		t.Fatalf("rollup %+v, parent %+v, child %+v", parent.Rollup, parent.Issues, child.Issues)
+	}
+	if parent.RollupEstimateCoverage == nil || child.EstimateCoverage == nil || parent.EstimateCoverage == nil {
+		t.Fatal("rollup estimate coverage missing")
+	}
+	pd, cd := parent.Issues.Open-parent.Issues.AwaitingQA, child.Issues.Open-child.Issues.AwaitingQA
+	want := (*parent.EstimateCoverage*float64(pd) + *child.EstimateCoverage*float64(cd)) / float64(pd+cd)
+	if d := *parent.RollupEstimateCoverage - want; d > 1e-9 || d < -1e-9 {
+		t.Fatalf("rollup coverage %v, want %v", *parent.RollupEstimateCoverage, want)
+	}
+	if child.Rollup != nil || len(child.SubprojectIDs) != 0 {
+		t.Fatalf("leaf project has rollup %+v", child.Rollup)
+	}
+
+	// A user who may not see the subproject gets no rollup for it.
+	pm := e.user("pm@example.test", auth.ProjectManager, 10)
+	var one struct{ Project ProjectView }
+	pm.do("GET", "/api/v1/projects/10", nil, &one)
+	if one.Project.Rollup != nil || len(one.Project.SubprojectIDs) != 0 {
+		t.Fatalf("hidden subproject leaked: %+v %+v", one.Project.SubprojectIDs, one.Project.Rollup)
+	}
+}

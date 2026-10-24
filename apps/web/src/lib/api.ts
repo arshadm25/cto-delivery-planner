@@ -115,6 +115,12 @@ export interface ProjectSummary {
   flag_counts: Record<string, number>;
   redmine_url?: string;
   delivery?: DeliveryDates;
+  /** Direct subprojects the viewer may see. */
+  subproject_ids?: number[];
+  /** issues summed over this project and its visible subprojects; null without any. */
+  rollup?: ProjectSummary["issues"] | null;
+  rollup_remaining_estimated_hours?: number | null;
+  rollup_estimate_coverage?: number | null;
 }
 
 export interface WorkloadConcern {
