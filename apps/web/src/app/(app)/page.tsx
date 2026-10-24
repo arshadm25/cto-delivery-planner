@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { HEALTH_LABEL, HealthState, Portfolio } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
-import { ago, date, hours, pct, tbd } from "@/lib/format";
+import { ago, date, hours, pct } from "@/lib/format";
 import { Card, ErrorBox, HealthBadge, Loading, StaleBanner, Stat, Table } from "@/components/ui";
 
 const ORDER: HealthState[] = ["blocked", "at_risk", "insufficient_data", "on_track"];
@@ -43,14 +43,14 @@ export default function Overview() {
           <Table head={["Project", "Health", "Open", "Overdue", "Blocked", "Estimates", "Next milestone", "Forecast"]}>
             {projects.map((p) => (
               <tr key={p.id} className="hover:bg-slate-50">
-                <td className="px-2 py-2"><Link className="font-medium text-slate-900 hover:underline" href={`/projects/${p.id}`}>{p.name}</Link></td>
+                <td className="px-2 py-2"><Link className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:decoration-blue-700" href={`/projects/${p.id}`}>{p.name}</Link></td>
                 <td className="px-2 py-2" title={p.health.reasons.join("; ")}><HealthBadge state={p.health.state} /></td>
                 <td className="px-2 py-2" title={`${p.issues.awaiting_qa} awaiting QA`}>{p.issues.open}{p.issues.awaiting_qa > 0 && <span className="text-xs text-slate-500"> ({p.issues.awaiting_qa} QA)</span>}</td>
                 <td className="px-2 py-2">{p.issues.overdue || ""}</td>
                 <td className="px-2 py-2">{p.issues.blocked || ""}</td>
                 <td className="px-2 py-2" title={`Remaining estimated: ${hours(p.remaining_estimated_hours)}`}>{pct(p.estimate_coverage)}</td>
                 <td className="px-2 py-2">{p.next_milestone ? `${p.next_milestone.name} · ${date(p.next_milestone.due_date)}` : "TBD"}</td>
-                <td className="px-2 py-2">{p.delivery ? tbd(p.delivery.forecast) : "TBD"}</td>
+                <td className="px-2 py-2">{date(p.delivery?.forecast)}</td>
               </tr>
             ))}
           </Table>
@@ -63,7 +63,7 @@ export default function Overview() {
               <ul className="space-y-2 text-sm">
                 {data.upcoming_milestones.map((m) => (
                   <li key={m.id}>
-                    <Link href={`/projects/${m.project_id}`} className="font-medium hover:underline">{m.name}</Link>
+                    <Link href={`/projects/${m.project_id}`} className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:decoration-blue-700">{m.name}</Link>
                     <div className="text-slate-500">{date(m.due_date)} · {m.open} of {m.total} open</div>
                   </li>
                 ))}
