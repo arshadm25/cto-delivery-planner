@@ -29,6 +29,8 @@ type Server struct {
 	TimeEntries []redmine.TimeEntry
 	// TimeEntriesForbidden makes /time_entries.json answer 403.
 	TimeEntriesForbidden bool
+	// TimeEntriesForbiddenProject makes time entries for one project answer 403.
+	TimeEntriesForbiddenProject int
 	// FailNext makes the next N requests answer 503.
 	FailNext int
 	// FailProject makes every issues request for that project answer 500.
@@ -97,6 +99,10 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		pid, _ := strconv.Atoi(q.Get("project_id"))
+		if pid != 0 && pid == s.TimeEntriesForbiddenProject {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 		var items []any
 		for _, te := range s.TimeEntries {
 			if pid == 0 || te.Project.ID == pid {

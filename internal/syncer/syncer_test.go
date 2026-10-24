@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -236,5 +237,26 @@ func TestConcurrentRunIsRefused(t *testing.T) {
 	defer conn.Exec(ctx, `SELECT pg_advisory_unlock($1)`, runLockID)
 	if _, err := sy.Run(ctx, Full); err != ErrAlreadyRunning {
 		t.Fatalf("err %v", err)
+	}
+}
+
+func TestTimeEntriesForbiddenForOneProjectKeepsOthers(t *testing.T) {
+	srv, pool, sy := setup(t, 3)
+	srv.Lock()
+	srv.TimeEntriesForbiddenProject = 11
+	srv.Unlock()
+	res := mustRun(t, sy, Full)
+	if res.Outcome != "succeeded" || len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "[11]") {
+		t.Fatalf("outcome %s warnings %v", res.Outcome, res.Warnings)
+	}
+	// Project 10's entries are still imported, whatever order projects ran in.
+	if n := count(t, pool, `SELECT count(*) FROM redmine_time_entries WHERE project_redmine_id = 10`); n != 1 {
+		t.Fatalf("project 10 time entries %d, want 1", n)
+	}
+	if c := res.Counts["time_entries"]; c == nil || c.Created != 1 {
+		t.Fatalf("time entry counts %+v", c)
+	}
+	if c := res.Counts["relations"]; c == nil || c.Created != 1 || c.Fetched != 1 {
+		t.Fatalf("relation counts %+v", c)
 	}
 }
