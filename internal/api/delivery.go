@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -16,16 +17,23 @@ import (
 // Delivery is a scope's baseline, forecast and actual dates with the
 // forecast's explanation. The three dates are always separate.
 type Delivery struct {
-	Baseline       *time.Time     `json:"baseline"`
-	BaselineSource *string        `json:"baseline_source"`
-	CommitmentID   *int64         `json:"commitment_id"`
-	Forecast       *time.Time     `json:"forecast"`
-	Actual         *time.Time     `json:"actual"`
-	Confidence     string         `json:"confidence"`
-	Method         string         `json:"method"`
-	Status         string         `json:"status"`
-	Assumptions    []string       `json:"assumptions"`
-	Inputs         map[string]any `json:"inputs"`
+	Baseline       *time.Time `json:"baseline"`
+	BaselineSource *string    `json:"baseline_source"`
+	CommitmentID   *int64     `json:"commitment_id"`
+	Forecast       *time.Time `json:"forecast"`
+	// DevDone is when development finishes; Forecast adds the QA days.
+	DevDone     *time.Time     `json:"dev_done"`
+	Actual      *time.Time     `json:"actual"`
+	Confidence  string         `json:"confidence"`
+	Method      string         `json:"method"`
+	Status      string         `json:"status"`
+	Assumptions []string       `json:"assumptions"`
+	Inputs      map[string]any `json:"inputs"`
+	// CoversProjectIDs lists the projects a parent's forecast includes:
+	// itself and its in-scope subprojects. Empty for a single project.
+	CoversProjectIDs []int `json:"covers_project_ids,omitempty"`
+	// Scope is set when the baseline froze its scope on approval.
+	Scope *ScopeChange `json:"scope,omitempty"`
 }
 
 // liveCommitment is the approved or delivered commitment for a scope.
@@ -93,6 +101,16 @@ func (s *Server) addDelivery(ctx context.Context, a *analysis) error {
 	if a.commitments, err = s.plan.Commitments(ctx, ids); err != nil {
 		return err
 	}
+	var live []int64
+	for _, c := range a.commitments {
+		if c.Status == "approved" || c.Status == "delivered" {
+			live = append(live, c.ID)
+		}
+	}
+	scopes, err := s.plan.Scopes(ctx, live)
+	if err != nil {
+		return err
+	}
 	today := a.rules.Today
 	if a.allocations, err = s.plan.Allocations(ctx, today, today.AddDate(1, 0, 0)); err != nil {
 		return err
@@ -104,13 +122,22 @@ func (s *Server) addDelivery(ctx context.Context, a *analysis) error {
 	}
 
 	for _, p := range a.d.Projects {
-		issues := a.d.ProjectIssues(p.ID)
-		weekly := capacityHours(a.allocations, a.calendar, p.ID, today, today.AddDate(0, 0, 27)) / 4
-		if weekly < 0 {
-			weekly = 0
+		// A parent project is planned together with its in-scope
+		// subprojects: one baseline, one forecast and their summed capacity.
+		tree := a.d.Subtree(p.ID)
+		var issues []risks.Issue
+		for _, id := range tree {
+			issues = append(issues, a.d.ProjectIssues(id)...)
 		}
+		weekly := weeklyCapacity(a, tree)
 		c := liveCommitment(a.commitments, p.ID, nil)
-		d, flags := s.deliveryFor(a, p.ID, issues, issueByID, weekly, c)
+		d, flags := s.deliveryFor(a, p.ID, tree, issues, issueByID, deliveryOpts{weekly: weekly, c: c, scope: scopes})
+		if len(tree) > 1 {
+			d.CoversProjectIDs = tree
+			own, _ := s.deliveryFor(a, p.ID, []int{p.ID}, a.d.ProjectIssues(p.ID), issueByID,
+				deliveryOpts{weekly: weeklyCapacity(a, []int{p.ID}), c: c, scope: scopes})
+			a.projects[p.ID].ownDelivery = own
+		}
 		a.projects[p.ID].Delivery = d
 		a.flags[p.ID] = append(a.flags[p.ID], flags...)
 		if c == nil {
@@ -119,31 +146,91 @@ func (s *Server) addDelivery(ctx context.Context, a *analysis) error {
 				Action: "Record the approved baseline date (P4-07) or confirm there is none."})
 		}
 
-		// Version-level commitments get their own forecast.
+		// Milestone commitments get their own forecast. The same people
+		// deliver them one after another in baseline order, so each one's
+		// forecast starts after the open work of the milestones before it.
+		var vcs []*planning.Commitment
 		for i := range a.commitments {
 			vc := &a.commitments[i]
-			if vc.ProjectID != p.ID || vc.VersionID == nil || (vc.Status != "approved" && vc.Status != "delivered") {
-				continue
+			if vc.ProjectID == p.ID && vc.VersionID != nil && (vc.Status == "approved" || vc.Status == "delivered") {
+				vcs = append(vcs, vc)
 			}
+		}
+		sort.SliceStable(vcs, func(i, j int) bool { return vcs[i].BaselineDate.Before(vcs[j].BaselineDate) })
+		var aheadHours float64
+		var aheadOpen int
+		for _, vc := range vcs {
 			var scoped []risks.Issue
 			for _, is := range a.d.Issues {
 				if is.VersionID != nil && *is.VersionID == *vc.VersionID {
 					scoped = append(scoped, is)
 				}
 			}
-			vd, vflags := s.deliveryFor(a, p.ID, scoped, issueByID, weekly, vc)
+			vd, vflags := s.deliveryFor(a, p.ID, tree, scoped, issueByID,
+				deliveryOpts{weekly: weekly, c: vc, scope: scopes, aheadHours: aheadHours, aheadOpen: aheadOpen})
 			for j := range vflags {
 				vflags[j].VersionID = vc.VersionID
 			}
 			a.versionDelivery[vc.ID] = vd
 			a.flags[p.ID] = append(a.flags[p.ID], vflags...)
+			if vc.Status == "approved" {
+				h, n := openWork(scoped, a.rules.AwaitingQA)
+				aheadHours += h
+				aheadOpen += n
+			}
 		}
 	}
 	return nil
 }
 
-func (s *Server) deliveryFor(a *analysis, projectID int, issues []risks.Issue, issueByID map[int]*risks.Issue,
-	weekly float64, c *planning.Commitment) (*Delivery, []risks.Flag) {
+// weeklyCapacity is approved hours per week over the next four weeks for
+// the given projects.
+func weeklyCapacity(a *analysis, projectIDs []int) float64 {
+	today := a.rules.Today
+	var total float64
+	for _, id := range projectIDs {
+		if h := capacityHours(a.allocations, a.calendar, id, today, today.AddDate(0, 0, 27)); h > 0 {
+			total += h
+		}
+	}
+	return total / 4
+}
+
+// openWork is the remaining development effort, scaled up for unestimated
+// issues as the forecast does, and the open development issue count.
+func openWork(issues []risks.Issue, awaitingQA func(risks.Issue) bool) (float64, int) {
+	var rem float64
+	open, est := 0, 0
+	for _, is := range issues {
+		if is.IsClosed || awaitingQA(is) {
+			continue
+		}
+		open++
+		if is.Estimated != nil {
+			est++
+			done := 0.0
+			if is.DoneRatio != nil {
+				done = float64(*is.DoneRatio) / 100
+			}
+			rem += *is.Estimated * (1 - done)
+		}
+	}
+	if est == 0 {
+		return 0, open
+	}
+	return rem * float64(open) / float64(est), open
+}
+
+type deliveryOpts struct {
+	weekly     float64
+	c          *planning.Commitment
+	scope      map[int64][]planning.ScopeItem
+	aheadHours float64
+	aheadOpen  int
+}
+
+func (s *Server) deliveryFor(a *analysis, projectID int, projectIDs []int, issues []risks.Issue, issueByID map[int]*risks.Issue,
+	o deliveryOpts) (*Delivery, []risks.Flag) {
 
 	inScope := map[int]bool{}
 	for _, is := range issues {
@@ -158,24 +245,87 @@ func (s *Server) deliveryFor(a *analysis, projectID int, issues []risks.Issue, i
 			blockerDue = append(blockerDue, *b.DueDate)
 		}
 	}
-	in := forecast.Input{Today: a.rules.Today, Issues: issues, AwaitingQA: a.rules.AwaitingQA, BlockerDue: blockerDue, WeeklyCapacity: weekly,
-		CapacityUntilBaseline: -1, Calendar: a.calendar}
+	in := forecast.Input{Today: a.rules.Today, Issues: issues, AwaitingQA: a.rules.AwaitingQA, BlockerDue: blockerDue, WeeklyCapacity: o.weekly,
+		CapacityUntilBaseline: -1, Calendar: a.calendar, AheadHours: o.aheadHours, AheadOpen: o.aheadOpen, QADays: a.rules.QADays}
 	var src *string
 	var cid *int64
-	if c != nil {
+	var scope *ScopeChange
+	if c := o.c; c != nil {
 		b := c.BaselineDate
 		in.Baseline = &b
 		in.Actual = c.ActualDate
-		in.CapacityUntilBaseline = capacityHours(a.allocations, a.calendar, projectID, a.rules.Today, b)
+		in.CapacityUntilBaseline = -1
+		for _, id := range projectIDs {
+			if h := capacityHours(a.allocations, a.calendar, id, a.rules.Today, b); h >= 0 {
+				in.CapacityUntilBaseline = max(in.CapacityUntilBaseline, 0) + h
+			}
+		}
 		label := fmt.Sprintf("Commitment #%d: %s", c.ID, c.Title)
 		src, cid = &label, &c.ID
+		if items, ok := o.scope[c.ID]; ok {
+			scope = scopeChange(items, issues)
+		}
 	}
 	r := forecast.Compute(in)
 	for i := range r.Flags {
 		r.Flags[i].ProjectID = projectID
 	}
-	return &Delivery{Baseline: r.Baseline, BaselineSource: src, CommitmentID: cid, Forecast: r.Forecast, Actual: r.Actual,
-		Confidence: r.Confidence, Method: r.Method, Status: r.Status, Assumptions: r.Assumptions, Inputs: r.Inputs}, r.Flags
+	return &Delivery{Baseline: r.Baseline, BaselineSource: src, CommitmentID: cid, Forecast: r.Forecast, DevDone: r.DevDone, Actual: r.Actual,
+		Confidence: r.Confidence, Method: r.Method, Status: r.Status, Assumptions: r.Assumptions, Inputs: r.Inputs, Scope: scope}, r.Flags
+}
+
+// ScopeChange compares the work in a commitment's scope now with the work
+// frozen when it was approved.
+type ScopeChange struct {
+	BaselineIssues int     `json:"baseline_issues"`
+	BaselineHours  float64 `json:"baseline_hours"`
+	CurrentIssues  int     `json:"current_issues"`
+	CurrentHours   float64 `json:"current_hours"`
+	Added          []int   `json:"added"`
+	Removed        []int   `json:"removed"`
+	// EstimateChangeHours is how much estimates of issues in both moved.
+	EstimateChangeHours float64 `json:"estimate_change_hours"`
+}
+
+func scopeChange(items []planning.ScopeItem, issues []risks.Issue) *ScopeChange {
+	sc := &ScopeChange{Added: []int{}, Removed: []int{}}
+	frozen := map[int]planning.ScopeItem{}
+	for _, it := range items {
+		frozen[it.IssueID] = it
+		sc.BaselineIssues++
+		if it.Estimated != nil {
+			sc.BaselineHours += *it.Estimated
+		}
+	}
+	now := map[int]bool{}
+	for _, is := range issues {
+		now[is.ID] = true
+		sc.CurrentIssues++
+		if is.Estimated != nil {
+			sc.CurrentHours += *is.Estimated
+		}
+		it, was := frozen[is.ID]
+		if !was {
+			sc.Added = append(sc.Added, is.ID)
+			continue
+		}
+		var before, after float64
+		if it.Estimated != nil {
+			before = *it.Estimated
+		}
+		if is.Estimated != nil {
+			after = *is.Estimated
+		}
+		sc.EstimateChangeHours += after - before
+	}
+	for _, it := range items {
+		if !now[it.IssueID] {
+			sc.Removed = append(sc.Removed, it.IssueID)
+		}
+	}
+	sort.Ints(sc.Added)
+	sort.Ints(sc.Removed)
+	return sc
 }
 
 func (s *Server) attachCommitments(ctx context.Context, a *analysis, projectID int, ms []MilestoneView) error {
@@ -292,12 +442,51 @@ func (s *Server) handleDecideCommitment(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	c, err := s.plan.Decide(r.Context(), s.planActor(r), id, in.Approve, in.Note)
+	var scope []planning.ScopeItem
+	if in.Approve {
+		var err error
+		if scope, err = s.commitmentScope(r, id); err != nil {
+			s.internal(w, r, err)
+			return
+		}
+	}
+	c, err := s.plan.Decide(r.Context(), s.planActor(r), id, in.Approve, in.Note, scope)
 	if err != nil {
 		s.planError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, c)
+}
+
+// commitmentScope is the work a commitment covers right now, with the
+// planner's values: a milestone's issues, or a project's and its
+// subprojects' issues for a whole-project commitment.
+func (s *Server) commitmentScope(r *http.Request, id int64) ([]planning.ScopeItem, error) {
+	c, err := s.plan.Commitment(r.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+	d, err := s.store.Dataset(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	var issues []risks.Issue
+	if c.VersionID != nil {
+		for _, is := range d.Issues {
+			if is.VersionID != nil && *is.VersionID == *c.VersionID {
+				issues = append(issues, is)
+			}
+		}
+	} else {
+		for _, pid := range d.Subtree(c.ProjectID) {
+			issues = append(issues, d.ProjectIssues(pid)...)
+		}
+	}
+	out := make([]planning.ScopeItem, len(issues))
+	for i, is := range issues {
+		out[i] = planning.ScopeItem{IssueID: is.ID, Estimated: is.Estimated, Open: !is.IsClosed}
+	}
+	return out, nil
 }
 
 func (s *Server) handleDeliveredCommitment(w http.ResponseWriter, r *http.Request) {

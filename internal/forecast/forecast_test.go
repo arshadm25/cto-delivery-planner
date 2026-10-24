@@ -117,3 +117,33 @@ func TestAwaitingQAIsNotRemainingEffort(t *testing.T) {
 		t.Fatalf("only QA left must stay undelivered and TBD: %+v", only)
 	}
 }
+
+func TestEarlierMilestonesComeFirst(t *testing.T) {
+	// 40 h of own work and 40 h of an earlier milestone at 40 h/week:
+	// 10 working days instead of 5.
+	issues := []risks.Issue{open(f(20)), open(f(20))}
+	r := Compute(Input{Today: today, Issues: issues, WeeklyCapacity: 40, AheadHours: 40, CapacityUntilBaseline: -1, Calendar: DefaultCalendar()})
+	if r.Forecast.Format(time.DateOnly) != "2026-11-05" || r.Inputs["earlier_milestones_hours"] != 40.0 {
+		t.Fatalf("forecast %v inputs %v", r.Forecast, r.Inputs)
+	}
+}
+
+func TestQADaysMakeAReleaseDate(t *testing.T) {
+	qa := func(is risks.Issue) bool { return is.StatusName == "Fixed Not Tested" }
+	issues := []risks.Issue{open(f(10)), open(f(10)), open(f(10)), open(f(10))}
+	r := Compute(Input{Today: today, Issues: issues, WeeklyCapacity: 40, QADays: 3, CapacityUntilBaseline: -1, Calendar: DefaultCalendar(), AwaitingQA: qa})
+	if r.DevDone.Format(time.DateOnly) != "2026-10-29" || r.Forecast.Format(time.DateOnly) != "2026-11-03" {
+		t.Fatalf("dev done %v release %v", r.DevDone, r.Forecast)
+	}
+	// Only testing left: today plus the QA days, low confidence.
+	waiting := []risks.Issue{{StatusName: "Fixed Not Tested", Estimated: f(5)}}
+	r = Compute(Input{Today: today, Issues: waiting, QADays: 2, CapacityUntilBaseline: -1, Calendar: DefaultCalendar(), AwaitingQA: qa})
+	if r.Method != MethodQAOnly || r.Forecast.Format(time.DateOnly) != "2026-10-26" || r.Confidence != "low" {
+		t.Fatalf("qa only: %s %v %s", r.Method, r.Forecast, r.Confidence)
+	}
+	// Without QA days the old behaviour stays: TBD.
+	r = Compute(Input{Today: today, Issues: waiting, CapacityUntilBaseline: -1, Calendar: DefaultCalendar(), AwaitingQA: qa})
+	if r.Method != MethodNone || r.Forecast != nil {
+		t.Fatalf("no qa days: %s %v", r.Method, r.Forecast)
+	}
+}

@@ -146,9 +146,41 @@ func (s *Store) Propose(ctx context.Context, by Actor, in ProposeInput) (Commitm
 	return s.Commitment(ctx, id)
 }
 
+// ScopeItem is one issue in a commitment's scope, frozen on approval.
+type ScopeItem struct {
+	IssueID   int      `json:"issue_id"`
+	Estimated *float64 `json:"estimated_hours"`
+	Open      bool     `json:"open"`
+}
+
+// Scopes returns the frozen scope of each listed commitment that has one.
+func (s *Store) Scopes(ctx context.Context, ids []int64) (map[int64][]ScopeItem, error) {
+	out := map[int64][]ScopeItem{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := s.Pool.Query(ctx, `SELECT commitment_id, issue_redmine_id, estimated_hours::float8, was_open
+		FROM commitment_scope WHERE commitment_id = ANY($1) ORDER BY commitment_id, issue_redmine_id`, ids)
+	if err != nil {
+		return nil, err
+	}
+	_, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (int64, error) {
+		var id int64
+		var it ScopeItem
+		if err := r.Scan(&id, &it.IssueID, &it.Estimated, &it.Open); err != nil {
+			return 0, err
+		}
+		out[id] = append(out[id], it)
+		return id, nil
+	})
+	return out, err
+}
+
 // Decide approves or rejects a proposal. Approving a revision supersedes
-// the previous baseline; its row and date are kept for history.
-func (s *Store) Decide(ctx context.Context, by Actor, id int64, approve bool, note string) (Commitment, error) {
+// the previous baseline; its row and date are kept for history. On
+// approval, scope is the work in the commitment's scope at that moment; it
+// is frozen so later scope changes can be shown against the baseline.
+func (s *Store) Decide(ctx context.Context, by Actor, id int64, approve bool, note string, scope []ScopeItem) (Commitment, error) {
 	note = strings.TrimSpace(note)
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		var status string
@@ -177,6 +209,14 @@ func (s *Store) Decide(ctx context.Context, by Actor, id int64, approve bool, no
 		if _, err := tx.Exec(ctx, `UPDATE delivery_commitments SET status = $2, decided_by = $3, decided_at = now(),
 			decision_note = NULLIF($4, '') WHERE id = $1`, id, next, by.ID, note); err != nil {
 			return err
+		}
+		if approve {
+			for _, it := range scope {
+				if _, err := tx.Exec(ctx, `INSERT INTO commitment_scope (commitment_id, issue_redmine_id, estimated_hours, was_open)
+					VALUES ($1, $2, $3, $4)`, id, it.IssueID, it.Estimated, it.Open); err != nil {
+					return err
+				}
+			}
 		}
 		return audit.Record(ctx, tx, by.String(), next, "delivery_commitments", strconv.FormatInt(id, 10),
 			map[string]any{"status": status}, map[string]any{"status": next, "note": note})

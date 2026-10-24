@@ -148,3 +148,58 @@ func (s *Store) DeleteMilestone(ctx context.Context, projectID int, id int64, ac
 // ErrMilestoneCommitted is returned when deleting a milestone that a
 // commitment points at.
 var ErrMilestoneCommitted = errors.New("this milestone has a commitment; reject or supersede it first")
+
+// CreateTask adds a planner task to a project and returns its issue ID,
+// which is negative.
+func (s *Store) CreateTask(ctx context.Context, projectID int, subject string, userID int64, actor string) (int, error) {
+	var id int64
+	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, `INSERT INTO planner_tasks (project_redmine_id, subject, created_by) VALUES ($1, $2, $3) RETURNING id`,
+			projectID, subject, userID).Scan(&id); err != nil {
+			return err
+		}
+		return audit.Record(ctx, tx, actor, "create", "planner_tasks", strconv.FormatInt(id, 10), nil,
+			map[string]any{"project_id": projectID, "subject": subject})
+	})
+	s.Invalidate()
+	return int(-id), err
+}
+
+// UpdateTask renames a planner task or marks it done or open again. A nil
+// field is left as it is.
+func (s *Store) UpdateTask(ctx context.Context, projectID int, id int64, subject *string, done *bool, actor string) error {
+	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE planner_tasks SET subject = COALESCE($3, subject),
+			closed_on = CASE WHEN $4::boolean IS NULL THEN closed_on WHEN $4 THEN COALESCE(closed_on, now()) ELSE NULL END,
+			updated_at = now() WHERE id = $1 AND project_redmine_id = $2`, id, projectID, subject, done)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrPlanNotFound
+		}
+		return audit.Record(ctx, tx, actor, "update", "planner_tasks", strconv.FormatInt(id, 10), nil,
+			map[string]any{"subject": subject, "done": done})
+	})
+	s.Invalidate()
+	return err
+}
+
+// DeleteTask removes a planner task and its planner values.
+func (s *Store) DeleteTask(ctx context.Context, projectID int, id int64, actor string) error {
+	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `DELETE FROM planner_tasks WHERE id = $1 AND project_redmine_id = $2`, id, projectID)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrPlanNotFound
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM issue_plans WHERE issue_redmine_id = $1`, -id); err != nil {
+			return err
+		}
+		return audit.Record(ctx, tx, actor, "delete", "planner_tasks", strconv.FormatInt(id, 10), nil, nil)
+	})
+	s.Invalidate()
+	return err
+}

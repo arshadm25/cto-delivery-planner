@@ -89,6 +89,9 @@ func (s *Server) routes() {
 	m.Handle("POST /api/v1/projects/{id}/planner-milestones", s.authed(s.require(auth.PlanWork, s.handleSaveMilestone)))
 	m.Handle("PUT /api/v1/projects/{id}/planner-milestones/{mid}", s.authed(s.require(auth.PlanWork, s.handleSaveMilestone)))
 	m.Handle("DELETE /api/v1/projects/{id}/planner-milestones/{mid}", s.authed(s.require(auth.PlanWork, s.handleDeleteMilestone)))
+	m.Handle("POST /api/v1/projects/{id}/tasks", s.authed(s.require(auth.PlanWork, s.handleCreateTask)))
+	m.Handle("PATCH /api/v1/projects/{id}/tasks/{tid}", s.authed(s.require(auth.PlanWork, s.handleUpdateTask)))
+	m.Handle("DELETE /api/v1/projects/{id}/tasks/{tid}", s.authed(s.require(auth.PlanWork, s.handleDeleteTask)))
 	m.Handle("GET /api/v1/risks", s.authed(s.handleRisks))
 	m.Handle("GET /api/v1/sync/status", s.authed(s.handleSyncStatus))
 

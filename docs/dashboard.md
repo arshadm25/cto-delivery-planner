@@ -53,6 +53,7 @@ All under `/api/v1`, JSON, cookie session. The Next.js app forwards `/api/v1/*` 
 | POST | `/projects/{id}/plan` | Set estimate, due date, assignee or milestone on one or more issues (`{"issue_ids": [...], "changes": {...}}`; `null` goes back to Redmine) |
 | POST, PUT, DELETE | `/projects/{id}/planner-milestones[/{mid}]` | Milestones created in the planner (`mid` is minus the version ID) |
 | GET, POST, PUT, DELETE | `/teams[/{id}]` | Teams built from Redmine users |
+| POST, PATCH, DELETE | `/projects/{id}/tasks[/{tid}]` | Planner tasks (`tid` is minus the issue ID); PATCH takes `subject` and `done` |
 | GET | `/risks?project=&kind=&severity=&page=` | All flags with evidence |
 | GET | `/sync/status` | Recent runs, last success, checkpoint, reconciliation |
 | GET, PUT | `/settings/rules` | Thresholds |
