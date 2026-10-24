@@ -7,10 +7,11 @@ import { Card, ErrorBox, FlagChip, Table } from "./ui";
 
 // Milestones of a project: Redmine versions plus milestones created in the
 // planner. Only planner milestones can be edited here; Redmine is never
-// changed. Issues are put into milestones from the Issues card.
+// changed. Issues are put into milestones from the Issues card, and clicking a
+// milestone opens that card filtered to it.
 
-export function MilestonesCard({ projectId, milestones, error, onChange }: {
-  projectId: number; milestones: Milestone[]; error?: Error | null; onChange: () => void;
+export function MilestonesCard({ projectId, milestones, error, onOpen, onChange }: {
+  projectId: number; milestones: Milestone[]; error?: Error | null; onOpen: (id: number) => void; onChange: () => void;
 }) {
   const me = useMe();
   const editable = can(me, "plan_work");
@@ -43,7 +44,7 @@ export function MilestonesCard({ projectId, milestones, error, onChange }: {
         ) : (
           <tr key={m.id}>
             <td className="px-2 py-2">
-              {m.redmine_url ? <a className="hover:underline" href={m.redmine_url} target="_blank" rel="noreferrer">{m.name}</a> : m.name}
+              <button className="link text-left" title="Show this milestone's issues" onClick={() => onOpen(m.id)}>{m.name}</button>
               {m.planner && <span className="ml-1 rounded bg-violet-100 px-1 text-[10px] font-medium uppercase text-violet-800">planner</span>}
             </td>
             <td className="px-2 py-2">{date(m.due_date)}</td>

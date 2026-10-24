@@ -16,12 +16,14 @@ const FLAG_FILTERS = Object.entries(FLAG_LABEL).filter(
   ([k]) => !k.startsWith("milestone") && !["forecast_after_baseline", "capacity_risk", "no_baseline", "release_readiness"].includes(k),
 );
 
-export function IssuesCard({ projectId, milestones, onChange }: { projectId: number; milestones: Milestone[]; onChange: () => void }) {
+export function IssuesCard({ projectId, milestones, initialMilestone, onChange }: {
+  projectId: number; milestones: Milestone[]; initialMilestone?: number | null; onChange: () => void;
+}) {
   const me = useMe();
   const editable = can(me, "plan_work");
   const [status, setStatus] = useState("open");
   const [flag, setFlag] = useState("");
-  const [version, setVersion] = useState("");
+  const [version, setVersion] = useState(initialMilestone == null ? "" : String(initialMilestone));
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("id");
   const [page, setPage] = useState(1);

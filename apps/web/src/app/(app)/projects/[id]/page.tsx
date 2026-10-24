@@ -28,11 +28,14 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   // Names and health of the parent and subprojects come from the portfolio list.
   const portfolio = useApi<Portfolio>("/portfolio/summary");
   const [tab, setTab] = useState<Tab>("risks");
+  // Set when a milestone is clicked, so the Issues tab opens filtered to it.
+  const [openMilestone, setOpenMilestone] = useState<number | null>(null);
   useEffect(() => {
     const h = window.location.hash.slice(1) as Tab;
     if (TABS.includes(h)) setTab(h);
   }, []);
   const pick = (t: Tab) => { setTab(t); history.replaceState(null, "", `#${t}`); };
+  const pickTab = (t: Tab) => { setOpenMilestone(null); pick(t); };
 
   if (loading && !data) return <Loading />;
   if (error || !data) return <ErrorBox error={error} />;
@@ -89,7 +92,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       )}
 
       <div className="space-y-4">
-        <Tabs value={tab} onChange={pick} tabs={[
+        <Tabs value={tab} onChange={pickTab} tabs={[
           { id: "risks", label: "Risks and gaps", count: data.blockers.length },
           { id: "commitments", label: "Commitments" },
           { id: "milestones", label: "Milestones", count: milestones.length },
@@ -109,8 +112,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           </div>
         )}
         {tab === "commitments" && <Commitments project={p} milestones={milestones} onChange={() => { reload(); ms.reload(); }} />}
-        {tab === "milestones" && <MilestonesCard projectId={p.id} milestones={milestones} error={ms.error} onChange={() => { reload(); ms.reload(); }} />}
-        {tab === "issues" && <IssuesCard projectId={p.id} milestones={milestones} onChange={() => { reload(); ms.reload(); }} />}
+        {tab === "milestones" && <MilestonesCard projectId={p.id} milestones={milestones} error={ms.error}
+          onOpen={(mid) => { setOpenMilestone(mid); pick("issues"); }} onChange={() => { reload(); ms.reload(); }} />}
+        {tab === "issues" && <IssuesCard key={openMilestone ?? "all"} projectId={p.id} milestones={milestones} initialMilestone={openMilestone} onChange={() => { reload(); ms.reload(); }} />}
         {tab === "capacity" && <ProjectCapacity projectId={p.id} projectIds={p.delivery?.covers_project_ids ?? [p.id]} onChange={reload} />}
         {tab === "history" && <RiskHistory projectId={p.id} />}
       </div>

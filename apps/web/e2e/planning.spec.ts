@@ -64,6 +64,13 @@ test("work is planned in the planner without touching Redmine", async ({ page })
   await page.getByLabel("Estimate hours").fill("12");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByRole("cell", { name: /12(\.0)? ?h/ }).first()).toBeVisible();
+
+  // Clicking a milestone opens its issues in the planner, not Redmine.
+  await page.getByRole("tab", { name: /Milestones/ }).click();
+  await page.getByRole("button", { name: "Phase 2 (planner)" }).click();
+  await expect(page.getByRole("tab", { name: /Issues/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByLabel("Milestone filter")).toHaveValue(/^-\d+$/);
+  await expect(page.getByRole("checkbox", { name: /Select issue/ })).toHaveCount(2);
 });
 
 test("a team is built from Redmine members", async ({ page }) => {
