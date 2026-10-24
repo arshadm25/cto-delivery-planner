@@ -10,7 +10,7 @@ const OUTCOME_STYLE: Record<string, string> = {
   partial: "text-amber-700",
   failed: "text-red-700",
   abandoned: "text-red-700",
-  running: "text-sky-700",
+  running: "text-blue-700",
 };
 
 export default function SyncPage() {
@@ -22,16 +22,16 @@ export default function SyncPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Sync status</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Sync status</h1>
       {data.latest_failed && (
-        <div role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           The latest sync run ({latest.kind}, {dateTime(latest.started_at)}) {latest.outcome === "partial" ? "only partly succeeded" : latest.outcome}.
           {latest.error_summary && <> Error: {latest.error_summary}.</>}
           {data.showing_previous && <> The dashboard keeps showing data from the last successful run for anything that failed.</>}
         </div>
       )}
       {data.data_stale && !data.latest_failed && (
-        <div role="status" className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+        <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           No successful sync in the last {data.stale_after}.
         </div>
       )}

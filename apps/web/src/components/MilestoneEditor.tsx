@@ -56,8 +56,8 @@ export function MilestonesCard({ projectId, milestones, error, onChange }: {
               <td className="px-2 py-2 space-x-1 whitespace-nowrap">
                 {m.planner ? (
                   <>
-                    <button className="rounded border px-2 py-0.5" onClick={() => setEditing(m.id)}>Edit</button>
-                    <button className="rounded border px-2 py-0.5" onClick={() => {
+                    <button className="btn btn-sm" onClick={() => setEditing(m.id)}>Edit</button>
+                    <button className="btn btn-sm" onClick={() => {
                       if (confirm(`Delete “${m.name}”? Its issues go back to their Redmine milestone.`)) act(() => deleteMilestone(projectId, m.id));
                     }}>Delete</button>
                   </>
@@ -91,15 +91,15 @@ function MilestoneForm({ initial, submitLabel, onSubmit, onCancel }: {
   }
   return (
     <form onSubmit={submit} className="flex flex-wrap items-end gap-2 text-sm">
-      <input required aria-label="Milestone name" placeholder="Name, e.g. Phase 2 or UAT" value={name} onChange={(e) => setName(e.target.value)} className="min-w-56 rounded border px-2 py-1" />
-      <input type="date" aria-label="Milestone due date" value={due} onChange={(e) => setDue(e.target.value)} className="rounded border px-2 py-1" />
+      <input required aria-label="Milestone name" placeholder="Name, e.g. Phase 2 or UAT" value={name} onChange={(e) => setName(e.target.value)} className="field min-w-56" />
+      <input type="date" aria-label="Milestone due date" value={due} onChange={(e) => setDue(e.target.value)} className="field" />
       {initial && (
-        <select aria-label="Milestone status" value={status} onChange={(e) => setStatus(e.target.value as "open" | "closed")} className="rounded border px-2 py-1">
+        <select aria-label="Milestone status" value={status} onChange={(e) => setStatus(e.target.value as "open" | "closed")} className="field">
           <option value="open">open</option><option value="closed">closed</option>
         </select>
       )}
-      <button className="rounded bg-slate-900 px-3 py-1 text-white">{submitLabel}</button>
-      {onCancel && <button type="button" className="rounded border px-2 py-1" onClick={onCancel}>Cancel</button>}
+      <button className="btn btn-primary">{submitLabel}</button>
+      {onCancel && <button type="button" className="field" onClick={onCancel}>Cancel</button>}
     </form>
   );
 }

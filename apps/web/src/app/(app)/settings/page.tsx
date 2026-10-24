@@ -52,12 +52,12 @@ function CalendarCard() {
           ))}
         </div>
         <label className="block">Hours per working day
-          <input type="number" min={1} max={24} step="0.5" value={form.hours_per_day} onChange={(e) => setForm({ ...form, hours_per_day: +e.target.value })} className="mt-1 w-full rounded border px-2 py-1" />
+          <input type="number" min={1} max={24} step="0.5" value={form.hours_per_day} onChange={(e) => setForm({ ...form, hours_per_day: +e.target.value })} className="field mt-1 w-full" />
         </label>
         <label className="block">Holidays (one YYYY-MM-DD per line)
-          <textarea rows={4} value={holidays} onChange={(e) => setHolidays(e.target.value)} className="mt-1 w-full rounded border px-2 py-1 font-mono" />
+          <textarea rows={4} value={holidays} onChange={(e) => setHolidays(e.target.value)} className="field mt-1 w-full font-mono" />
         </label>
-        <button className="rounded bg-slate-900 px-3 py-1.5 text-white">Save calendar</button>
+        <button className="btn btn-primary">Save calendar</button>
         {msg && <p className="text-emerald-700">{msg}</p>}
         <ErrorBox error={err} />
       </form>
@@ -88,26 +88,26 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-xl space-y-4">
-      <h1 className="text-xl font-semibold">Rule settings</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Rule settings</h1>
       <p className="text-sm text-slate-600">These are starting values, not agreed policy. Every change is recorded in the audit log.</p>
       <Card>
         <form onSubmit={save} className="space-y-3 text-sm">
           <label className="block">Stale after (days without an update)
-            <input type="number" min={1} max={365} value={form.stale_after_days} onChange={(e) => setForm({ ...form, stale_after_days: +e.target.value })} className="mt-1 w-full rounded border px-2 py-1" />
+            <input type="number" min={1} max={365} value={form.stale_after_days} onChange={(e) => setForm({ ...form, stale_after_days: +e.target.value })} className="field mt-1 w-full" />
           </label>
           <label className="block">Check milestones due within (days)
-            <input type="number" min={1} max={365} value={form.milestone_warn_days} onChange={(e) => setForm({ ...form, milestone_warn_days: +e.target.value })} className="mt-1 w-full rounded border px-2 py-1" />
+            <input type="number" min={1} max={365} value={form.milestone_warn_days} onChange={(e) => setForm({ ...form, milestone_warn_days: +e.target.value })} className="field mt-1 w-full" />
           </label>
           <label className="block">Priorities treated as critical when blocked (comma separated, as named in Redmine)
-            <input value={form.high_priorities.join(", ")} onChange={(e) => setForm({ ...form, high_priorities: list(e.target.value) })} className="mt-1 w-full rounded border px-2 py-1" />
+            <input value={form.high_priorities.join(", ")} onChange={(e) => setForm({ ...form, high_priorities: list(e.target.value) })} className="field mt-1 w-full" />
           </label>
           <label className="block">Release-step keywords in milestone names
-            <input value={form.release_keywords.join(", ")} onChange={(e) => setForm({ ...form, release_keywords: list(e.target.value) })} className="mt-1 w-full rounded border px-2 py-1" />
+            <input value={form.release_keywords.join(", ")} onChange={(e) => setForm({ ...form, release_keywords: list(e.target.value) })} className="field mt-1 w-full" />
           </label>
           <label className="block">Statuses meaning &quot;awaiting QA&quot; (comma separated, as named in Redmine). These issues stay open but are not counted as remaining development work or flagged as stale.
-            <input value={(form.awaiting_qa_statuses ?? []).join(", ")} onChange={(e) => setForm({ ...form, awaiting_qa_statuses: list(e.target.value) })} className="mt-1 w-full rounded border px-2 py-1" />
+            <input value={(form.awaiting_qa_statuses ?? []).join(", ")} onChange={(e) => setForm({ ...form, awaiting_qa_statuses: list(e.target.value) })} className="field mt-1 w-full" />
           </label>
-          <button className="rounded bg-slate-900 px-3 py-1.5 text-white">Save</button>
+          <button className="btn btn-primary">Save</button>
           {msg && <p className="text-emerald-700">{msg}</p>}
           <ErrorBox error={err} />
         </form>

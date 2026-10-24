@@ -15,6 +15,7 @@ test("baseline is proposed, approved, and kept separate from the forecast", asyn
   await page.goto("/projects/10");
   await expect(page.getByText("Approved baseline")).toBeVisible();
   await expect(page.getByText("No approved commitment")).toBeVisible();
+  await page.getByRole("tab", { name: "Commitments" }).click();
   await page.getByPlaceholder("Title").fill("Phase 1 go-live");
   await page.getByLabel("Baseline date").fill("2027-03-31");
   await page.getByPlaceholder("Reason or source of the commitment").fill("Fictional signed plan");
@@ -24,10 +25,10 @@ test("baseline is proposed, approved, and kept separate from the forecast", asyn
 
   const cto = await browser.newPage();
   await login(cto, "cto@example.test");
-  await cto.goto("/projects/10");
+  await cto.goto("/projects/10#commitments");
   await cto.getByRole("button", { name: "Approve" }).click();
   await expect(cto.getByRole("cell", { name: "approved" })).toBeVisible();
-  await expect(cto.getByText("2027-03-31").first()).toBeVisible();
+  await expect(cto.getByText("31 Mar 2027").first()).toBeVisible();
   await expect(cto.getByText("Forecast", { exact: true }).first()).toBeVisible();
   await expect(cto.getByText("Actual", { exact: true }).first()).toBeVisible();
 });
@@ -42,13 +43,14 @@ test("weekly report and workload pages render", async ({ page }) => {
 
 test("work is planned in the planner without touching Redmine", async ({ page }) => {
   await login(page, "pm@example.test");
-  await page.goto("/projects/10");
+  await page.goto("/projects/10#milestones");
   await page.getByLabel("Milestone name").fill("Phase 2 (planner)");
   await page.getByLabel("Milestone due date").fill("2027-02-26");
   await page.getByRole("button", { name: "Add milestone" }).click();
   await expect(page.getByRole("cell", { name: /Phase 2 \(planner\)/ })).toBeVisible();
 
   // Move two issues into the new milestone in one go.
+  await page.getByRole("tab", { name: /Issues/ }).click();
   const boxes = page.getByRole("checkbox", { name: /Select issue/ });
   await boxes.nth(0).check();
   await boxes.nth(1).check();

@@ -27,20 +27,26 @@ function LoginForm() {
   }
 
   return (
-    <form onSubmit={submit} className="w-full max-w-sm space-y-4 rounded-lg border border-slate-200 bg-white p-6">
-      <h1 className="text-lg font-semibold">CTO Delivery Planner</h1>
-      <label className="block text-sm">
+    <form onSubmit={submit} className="w-full max-w-sm space-y-5 rounded-2xl border border-slate-200 bg-white p-8 shadow-lg shadow-slate-900/5">
+      <div className="space-y-3">
+        <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-600 font-bold text-white" aria-hidden>DP</div>
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">CTO Delivery Planner</h1>
+          <p className="text-sm text-slate-500">Sign in to see delivery forecasts and risks.</p>
+        </div>
+      </div>
+      <label className="block text-sm font-medium text-slate-700">
         Email
         <input type="email" required autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)}
-          className="mt-1 w-full rounded border border-slate-300 px-3 py-2" />
+          className="field mt-1 w-full py-2" />
       </label>
-      <label className="block text-sm">
+      <label className="block text-sm font-medium text-slate-700">
         Password
         <input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)}
-          className="mt-1 w-full rounded border border-slate-300 px-3 py-2" />
+          className="field mt-1 w-full py-2" />
       </label>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      <button disabled={busy} className="w-full rounded bg-slate-900 px-3 py-2 text-white disabled:opacity-50">
+      <button disabled={busy} className="btn btn-primary w-full py-2">
         {busy ? "Signing in…" : "Sign in"}
       </button>
     </form>

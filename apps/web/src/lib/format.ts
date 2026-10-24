@@ -13,9 +13,38 @@ export function pct(v: number | null | undefined): string {
   return `${Math.round(v * 100)}%`;
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// Dates from the API are calendar dates ("2026-11-03") or midnight UTC
+// timestamps. Only the date part is used, so no time zone can shift the day.
 export function date(v: string | null | undefined): string {
   if (!v) return "TBD";
-  return v.slice(0, 10);
+  const [y, m, d] = v.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return v;
+  return `${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+// Like date() but without the year when it is the current year.
+export function shortDate(v: string | null | undefined, today?: string): string {
+  if (!v) return "TBD";
+  const full = date(v);
+  const year = (today ?? new Date().toISOString()).slice(0, 4);
+  return full.endsWith(` ${year}`) ? full.slice(0, -5) : full;
+}
+
+// Whole days from a to b (both calendar dates); positive when b is later.
+export function daysBetween(a: string, b: string): number {
+  const ms = Date.parse(b.slice(0, 10) + "T00:00:00Z") - Date.parse(a.slice(0, 10) + "T00:00:00Z");
+  return Math.round(ms / 86400000);
+}
+
+export function relDays(v: string | null | undefined, today: string): string {
+  if (!v) return "";
+  const n = daysBetween(today, v);
+  if (n === 0) return "today";
+  if (n === 1) return "tomorrow";
+  if (n === -1) return "yesterday";
+  return n > 0 ? `in ${n} days` : `${-n} days ago`;
 }
 
 export function dateTime(v: string | null | undefined): string {

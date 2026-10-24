@@ -37,10 +37,10 @@ export default function WorkloadPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Team workload</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Team workload</h1>
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <label>From <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded border px-2 py-1" /></label>
-        <label>To <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded border px-2 py-1" /></label>
+        <label>From <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="field" /></label>
+        <label>To <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="field" /></label>
       </div>
       {loading && !data && <Loading />}
       <ErrorBox error={error} />
@@ -70,7 +70,7 @@ export default function WorkloadPage() {
             <Table head={["Project", "Open unassigned", "of which unestimated"]}>
               {(data.unassigned ?? []).map((u) => (
                 <tr key={u.project_id}>
-                  <td className="px-2 py-2"><Link className="hover:underline" href={`/projects/${u.project_id}`}>{u.project_name}</Link></td>
+                  <td className="px-2 py-2"><Link className="link" href={`/projects/${u.project_id}`}>{u.project_name}</Link></td>
                   <td className="px-2 py-2">{u.open}</td><td className="px-2 py-2">{u.unestimated}</td>
                 </tr>
               ))}
