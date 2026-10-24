@@ -29,9 +29,9 @@ PLANNER_NEW_PASSWORD='…' ./bin/api -create-user you@company.example -name "You
 | Role | Sees | Can change |
 |---|---|---|
 | Administrator | All in-scope projects | Users and project access, settings, project owner and tech lead |
-| CTO | All in-scope projects | Settings, project owner and tech lead, commitments (approve), capacity (approve) |
-| Project manager | Assigned projects | Propose commitments, capacity |
-| Tech lead | Assigned projects | Capacity |
+| CTO | All in-scope projects | Settings, project owner and tech lead, commitments (approve), capacity (approve), plan issues and milestones |
+| Project manager | Assigned projects | Propose commitments, capacity and teams, plan issues and milestones |
+| Tech lead | Assigned projects | Capacity and teams, plan issues and milestones |
 | Viewer | Assigned projects | Nothing |
 
 A project the user may not see answers 404 on every endpoint, so its existence is not disclosed. Project owner and tech lead are planner-owned fields that show TBD until someone records them (Q4 is still open).
@@ -50,6 +50,9 @@ All under `/api/v1`, JSON, cookie session. The Next.js app forwards `/api/v1/*` 
 | GET | `/projects/{id}/issues?status=&flag=&assignee=&version=&tracker=&q=&sort=&page=&per_page=` | Issues with flags and Redmine links |
 | GET | `/projects/{id}/milestones` | Versions with progress and flags |
 | PUT | `/projects/{id}/roles` | Owner and tech lead |
+| POST | `/projects/{id}/plan` | Set estimate, due date, assignee or milestone on one or more issues (`{"issue_ids": [...], "changes": {...}}`; `null` goes back to Redmine) |
+| POST, PUT, DELETE | `/projects/{id}/planner-milestones[/{mid}]` | Milestones created in the planner (`mid` is minus the version ID) |
+| GET, POST, PUT, DELETE | `/teams[/{id}]` | Teams built from Redmine users |
 | GET | `/risks?project=&kind=&severity=&page=` | All flags with evidence |
 | GET | `/sync/status` | Recent runs, last success, checkpoint, reconciliation |
 | GET, PUT | `/settings/rules` | Thresholds |

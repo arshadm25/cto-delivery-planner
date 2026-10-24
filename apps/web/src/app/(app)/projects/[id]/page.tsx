@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { api, Flag, FLAG_LABEL, Issue, Milestone, Portfolio, ProjectSummary } from "@/lib/api";
+import { api, Flag, Milestone, Portfolio, ProjectSummary } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
-import { ago, date, hours, pct, relDays, tbd } from "@/lib/format";
+import { ago, date, hours, pct, tbd } from "@/lib/format";
 import { can, useMe } from "@/components/Shell";
-import { Card, Empty, ErrorBox, FlagChip, HealthBadge, Loading, PageHeader, Pager, Progress, SeverityBadge, Stat, Table, Tabs } from "@/components/ui";
+import { Card, Empty, ErrorBox, HealthBadge, Loading, PageHeader, SeverityBadge, Stat, Tabs } from "@/components/ui";
 import { Commitments, DeliverySummary, RiskHistory } from "@/components/DeliveryPanel";
+import { IssuesCard } from "@/components/IssueEditor";
+import { MilestonesCard } from "@/components/MilestoneEditor";
 
 interface ProjectResponse {
   project: ProjectSummary;
@@ -105,16 +107,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           </div>
         )}
         {tab === "commitments" && <Commitments project={p} milestones={milestones} onChange={() => { reload(); ms.reload(); }} />}
-        {tab === "milestones" && (
-          <Card title="Milestones">
-            {ms.error && <ErrorBox error={ms.error} />}
-            <Table head={["Milestone", "Due", "Status", "Progress", "Remaining estimate", "Baseline", "Flags"]}>
-              {milestones.map((m) => <MilestoneRow key={m.id} m={m} today={today} />)}
-            </Table>
-            {ms.data && milestones.length === 0 && <Empty>No milestones (Redmine versions) in this project.</Empty>}
-          </Card>
-        )}
-        {tab === "issues" && <IssuesCard projectId={id} />}
+        {tab === "milestones" && <MilestonesCard projectId={p.id} milestones={milestones} error={ms.error} onChange={() => { reload(); ms.reload(); }} />}
+        {tab === "issues" && <IssuesCard projectId={p.id} milestones={milestones} onChange={() => { reload(); ms.reload(); }} />}
         {tab === "history" && <RiskHistory projectId={p.id} />}
       </div>
     </>
@@ -147,23 +141,6 @@ function RisksCard({ projectId }: { projectId: number }) {
         ))}
       </ul>
     </Card>
-  );
-}
-
-// One milestone row. Kept as its own component so editing can hook in here.
-function MilestoneRow({ m, today }: { m: Milestone; today: string }) {
-  return (
-    <tr>
-      <td className="px-2 py-2.5 font-medium">{m.redmine_url ? <a className="link" href={m.redmine_url} target="_blank" rel="noreferrer">{m.name}</a> : m.name}</td>
-      <td className="whitespace-nowrap px-2 py-2.5">{date(m.due_date)}<div className="text-xs text-slate-500">{relDays(m.due_date, today)}</div></td>
-      <td className="px-2 py-2.5">{m.status}</td>
-      <td className="px-2 py-2.5">
-        <div className="flex items-center gap-2"><Progress value={m.total ? (m.total - m.open) / m.total : 0} className="w-20" color="bg-blue-700" label="Closed share" /><span className="whitespace-nowrap tabular-nums text-slate-600">{m.open} of {m.total} open</span></div>
-      </td>
-      <td className="px-2 py-2.5">{hours(m.remaining_estimated_hours)}{m.open_no_estimate ? <span className="text-slate-500"> (+{m.open_no_estimate} unestimated)</span> : ""}</td>
-      <td className="whitespace-nowrap px-2 py-2.5">{m.commitment?.status === "approved" ? date(m.commitment.baseline_date) : "TBD"}</td>
-      <td className="space-x-1 px-2 py-2.5">{m.flags.map((f, i) => <FlagChip key={i} kind={f.kind} />)}</td>
-    </tr>
   );
 }
 
@@ -203,58 +180,5 @@ function RolesCard({ project, onSaved }: { project: ProjectSummary; onSaved: () 
         </>
       )}
     </div>
-  );
-}
-
-// One issue row. Kept as its own component so editing can hook in here.
-function IssueRow({ is }: { is: Issue }) {
-  return (
-    <tr>
-      <td className="px-2 py-2.5">{is.redmine_url ? <a className="link" href={is.redmine_url} target="_blank" rel="noreferrer">{is.id}</a> : is.id}</td>
-      <td className="px-2 py-2.5">{is.subject}</td>
-      <td className="whitespace-nowrap px-2 py-2.5">{is.status}</td>
-      <td className="whitespace-nowrap px-2 py-2.5">{is.assignee_name ?? <span className="text-slate-500">TBD</span>}</td>
-      <td className="whitespace-nowrap px-2 py-2.5">{date(is.due_date)}</td>
-      <td className="whitespace-nowrap px-2 py-2.5">{hours(is.estimated_hours)}</td>
-      <td className="whitespace-nowrap px-2 py-2.5">{hours(is.spent_hours)}</td>
-      <td className="space-x-1 px-2 py-2.5">{is.flags.map((f) => <FlagChip key={f} kind={f} />)}</td>
-    </tr>
-  );
-}
-
-function IssuesCard({ projectId }: { projectId: string }) {
-  const [status, setStatus] = useState("open");
-  const [flag, setFlag] = useState("");
-  const [q, setQ] = useState("");
-  const [sort, setSort] = useState("id");
-  const [page, setPage] = useState(1);
-  const qs = new URLSearchParams({ status, page: String(page), per_page: "50", sort });
-  if (flag) qs.set("flag", flag);
-  if (q) qs.set("q", q);
-  const { data, error } = useApi<{ issues: Issue[]; total: number; page: number; per_page: number }>(`/projects/${projectId}/issues?${qs}`);
-
-  return (
-    <Card title="Issues">
-      <div className="mb-3 flex flex-wrap gap-2">
-        <select aria-label="Status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="field">
-          <option value="open">Open</option><option value="awaiting_qa">Awaiting QA</option><option value="closed">Closed</option><option value="all">All</option>
-        </select>
-        <select aria-label="Flag" value={flag} onChange={(e) => { setFlag(e.target.value); setPage(1); }} className="field">
-          <option value="">Any flag</option>
-          {Object.entries(FLAG_LABEL).filter(([k]) => !k.startsWith("milestone") && !["forecast_after_baseline", "capacity_risk", "no_baseline", "release_readiness"].includes(k))
-            .map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} className="field">
-          <option value="id">By ID</option><option value="due">By due date</option><option value="updated">Recently updated</option>
-        </select>
-        <input aria-label="Search" placeholder="Search subject or #ID" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} className="field w-56" />
-      </div>
-      <ErrorBox error={error} />
-      <Table head={["#", "Subject", "Status", "Assignee", "Due", "Estimate", "Spent", "Flags"]}>
-        {(data?.issues ?? []).map((is) => <IssueRow key={is.id} is={is} />)}
-      </Table>
-      {data && data.issues.length === 0 && <Empty>No issues match.</Empty>}
-      {data && <Pager page={data.page} perPage={data.per_page} total={data.total} onPage={setPage} />}
-    </Card>
   );
 }
