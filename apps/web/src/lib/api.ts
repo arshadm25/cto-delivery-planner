@@ -72,6 +72,8 @@ export interface MilestoneRef {
   due_date: string | null;
   open: number;
   total: number;
+  // Created in the planner, not in Redmine. Planner milestones have negative IDs.
+  planner: boolean;
 }
 
 export interface DeliveryDates {
@@ -175,6 +177,54 @@ export interface Issue {
   updated_on: string;
   flags: string[];
   redmine_url?: string;
+  awaiting_qa: boolean;
+  // Fields whose value was set in the planner, and Redmine's value for each.
+  planned?: PlanField[];
+  redmine_values?: Partial<Record<PlanField, string | number | null>>;
+}
+
+// Fields that can be planned in the planner. Nothing is written to Redmine.
+export type PlanField = "estimated_hours" | "due_date" | "assignee_id" | "version_id";
+
+// planIssues applies one change to one or more issues; null goes back to
+// the Redmine value.
+export function planIssues(projectId: number, issueIds: number[], changes: Partial<Record<PlanField, string | number | null>>) {
+  return api<void>(`/projects/${projectId}/plan`, { method: "POST", body: { issue_ids: issueIds, changes } });
+}
+
+export interface MilestoneInput {
+  name: string;
+  due_date: string | null;
+  status?: "open" | "closed";
+}
+
+// Planner milestones are addressed by their planner ID, which is minus the
+// version ID.
+export function saveMilestone(projectId: number, versionId: number | null, body: MilestoneInput) {
+  return versionId === null
+    ? api<{ id: number }>(`/projects/${projectId}/planner-milestones`, { method: "POST", body })
+    : api<{ id: number }>(`/projects/${projectId}/planner-milestones/${-versionId}`, { method: "PUT", body });
+}
+
+export function deleteMilestone(projectId: number, versionId: number) {
+  return api<void>(`/projects/${projectId}/planner-milestones/${-versionId}`, { method: "DELETE" });
+}
+
+export interface Person {
+  id: number;
+  name: string;
+}
+
+export interface TeamMember {
+  person_id: number;
+  person_name: string | null;
+  hours_per_week: number | null;
+}
+
+export interface Team {
+  id: number;
+  name: string;
+  members: TeamMember[];
 }
 
 export interface Commitment {

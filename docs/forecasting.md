@@ -43,6 +43,17 @@ Further rules:
 - **Capacity risk.** Raised when remaining effort exceeds approved capacity before the baseline.
 - **No approved baseline.** Gives a low data-gap flag, and the forecast status stays TBD.
 
+## Planning in the planner
+
+Decided on 2026-10-24: planning happens in the planner, not in Redmine. Nothing is written back to Redmine, and the Redmine key stays read-only.
+
+- **Issue values.** On the project page, the CTO, project managers and tech leads can set an issue's estimate, due date, assignee and milestone. They can do it for one issue (Edit) or for many at once (tick the issues, then "Set … to …").
+- **Planner values win.** A value set in the planner replaces Redmine's in every view, flag, forecast, snapshot and the workload page, and it survives every sync. The issue list marks it "planner" and shows Redmine's value on hover. Clearing the value, or "use Redmine", goes back to Redmine's.
+- **Milestones.** Milestones can be created in the planner next to Redmine's versions. Inside the app they are versions with a negative ID. A commitment can target them like any version. Deleting one sends its issues back to their Redmine version. Deletion is refused while a commitment points at it.
+- **Teams.** Teams are built on the Capacity page from Redmine users, with each member's usual hours per week. Capacity can then be allocated to a team, and the team's usual hours suggest its available hours for the period.
+- **Audit.** Every change is written to `audit_events`.
+- **Storage.** Values are in `issue_plans`, `planner_milestones`, `planner_teams` and `planner_team_members` (migration 0004).
+
 ## Awaiting QA
 
 Some open Redmine statuses mean development is finished and the work is waiting for testing. At discovery (P1-12), 67% of open in-scope issues were in *Fixed Not Tested*. The CTO decided on 2026-10-22 that these issues count separately.

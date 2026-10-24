@@ -52,6 +52,7 @@ type MilestoneRef struct {
 	DueDate   *time.Time `json:"due_date"`
 	Open      int        `json:"open"`
 	Total     int        `json:"total"`
+	Planner   bool       `json:"planner"`
 }
 
 // ProjectSummary is the per-project row on the overview.
@@ -228,7 +229,7 @@ func milestoneRefs(versions []risks.Version, issues []risks.Issue) []MilestoneRe
 	out := make([]MilestoneRef, len(versions))
 	idx := map[int]int{}
 	for i, v := range versions {
-		out[i] = MilestoneRef{ID: v.ID, ProjectID: v.ProjectID, Name: v.Name, Status: v.Status, DueDate: v.Due}
+		out[i] = MilestoneRef{ID: v.ID, ProjectID: v.ProjectID, Name: v.Name, Status: v.Status, DueDate: v.Due, Planner: v.Planner}
 		idx[v.ID] = i
 	}
 	for _, is := range issues {
@@ -577,7 +578,7 @@ func (s *Server) handleMilestones(w http.ResponseWriter, r *http.Request) {
 	out := make([]MilestoneView, len(refs))
 	for i, m := range refs {
 		mv := MilestoneView{MilestoneRef: m, Flags: []risks.Flag{}}
-		if s.cfg.RedmineURL != "" {
+		if s.cfg.RedmineURL != "" && m.ID > 0 {
 			mv.RedmineURL = s.cfg.RedmineURL + "/versions/" + strconv.Itoa(m.ID)
 		}
 		var rem float64
@@ -644,7 +645,7 @@ func (s *Server) handleRisks(w http.ResponseWriter, r *http.Request) {
 			fv := FlagView{Flag: f, ProjectName: p.Name}
 			if f.IssueID != nil {
 				fv.RedmineURL = s.issueURL(*f.IssueID)
-			} else if f.VersionID != nil && s.cfg.RedmineURL != "" {
+			} else if f.VersionID != nil && *f.VersionID > 0 && s.cfg.RedmineURL != "" {
 				fv.RedmineURL = s.cfg.RedmineURL + "/versions/" + strconv.Itoa(*f.VersionID)
 			}
 			all = append(all, fv)

@@ -55,13 +55,16 @@ const (
 	ApproveCommitments Permission = "approve_commitments"
 	EditCapacity       Permission = "edit_capacity"
 	ApproveCapacity    Permission = "approve_capacity"
+	// PlanWork sets estimates, due dates, assignees and milestones in the
+	// planner. It never writes to Redmine.
+	PlanWork Permission = "plan_work"
 )
 
 var grants = map[Role][]Permission{
 	Admin:          {ManageUsers, EditSettings, EditProjectRoles},
-	CTO:            {EditSettings, EditProjectRoles, ProposeCommitments, ApproveCommitments, EditCapacity, ApproveCapacity},
-	ProjectManager: {ProposeCommitments, EditCapacity},
-	TechLead:       {EditCapacity},
+	CTO:            {EditSettings, EditProjectRoles, ProposeCommitments, ApproveCommitments, EditCapacity, ApproveCapacity, PlanWork},
+	ProjectManager: {ProposeCommitments, EditCapacity, PlanWork},
+	TechLead:       {EditCapacity, PlanWork},
 	Viewer:         {},
 }
 

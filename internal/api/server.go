@@ -85,6 +85,10 @@ func (s *Server) routes() {
 	m.Handle("GET /api/v1/projects/{id}/issues", s.authed(s.handleIssues))
 	m.Handle("GET /api/v1/projects/{id}/milestones", s.authed(s.handleMilestones))
 	m.Handle("PUT /api/v1/projects/{id}/roles", s.authed(s.require(auth.EditProjectRoles, s.handleSetRoles)))
+	m.Handle("POST /api/v1/projects/{id}/plan", s.authed(s.require(auth.PlanWork, s.handlePlanIssues)))
+	m.Handle("POST /api/v1/projects/{id}/planner-milestones", s.authed(s.require(auth.PlanWork, s.handleSaveMilestone)))
+	m.Handle("PUT /api/v1/projects/{id}/planner-milestones/{mid}", s.authed(s.require(auth.PlanWork, s.handleSaveMilestone)))
+	m.Handle("DELETE /api/v1/projects/{id}/planner-milestones/{mid}", s.authed(s.require(auth.PlanWork, s.handleDeleteMilestone)))
 	m.Handle("GET /api/v1/risks", s.authed(s.handleRisks))
 	m.Handle("GET /api/v1/sync/status", s.authed(s.handleSyncStatus))
 
@@ -100,6 +104,10 @@ func (s *Server) routes() {
 	m.Handle("POST /api/v1/commitments/{id}/delivered", s.authed(s.require(auth.ProposeCommitments, s.handleDeliveredCommitment)))
 
 	m.Handle("GET /api/v1/people", s.authed(s.handlePeople))
+	m.Handle("GET /api/v1/teams", s.authed(s.handleListTeams))
+	m.Handle("POST /api/v1/teams", s.authed(s.require(auth.EditCapacity, s.handleSaveTeam)))
+	m.Handle("PUT /api/v1/teams/{id}", s.authed(s.require(auth.EditCapacity, s.handleSaveTeam)))
+	m.Handle("DELETE /api/v1/teams/{id}", s.authed(s.require(auth.EditCapacity, s.handleDeleteTeam)))
 	m.Handle("GET /api/v1/capacity-allocations", s.authed(s.handleListAllocations))
 	m.Handle("POST /api/v1/capacity-allocations", s.authed(s.require(auth.EditCapacity, s.handleSaveAllocation)))
 	m.Handle("PUT /api/v1/capacity-allocations/{id}", s.authed(s.require(auth.EditCapacity, s.handleSaveAllocation)))

@@ -31,6 +31,10 @@ type Issue struct {
 	CreatedOn    time.Time  `json:"created_on"`
 	UpdatedOn    time.Time  `json:"updated_on"`
 	ClosedOn     *time.Time `json:"closed_on"`
+	// Planned names the fields whose value was set in the planner, and
+	// RedmineValues keeps what Redmine has for those fields.
+	Planned       []string       `json:"planned,omitempty"`
+	RedmineValues map[string]any `json:"redmine_values,omitempty"`
 }
 
 // Relation is a stored issue relation.
@@ -47,6 +51,8 @@ type Version struct {
 	Name      string     `json:"name"`
 	Status    string     `json:"status"`
 	Due       *time.Time `json:"due_date"`
+	// Planner is true for a milestone created in the planner (negative ID).
+	Planner bool `json:"planner"`
 }
 
 // Rules are the tunable thresholds. Zero values are replaced by defaults.
