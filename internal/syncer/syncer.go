@@ -126,12 +126,13 @@ type Result struct {
 
 type run struct {
 	*Syncer
-	res       *Result
-	mu        sync.Mutex
-	now       time.Time
-	statuses  map[int]bool // status ID -> is_closed
-	timeOff   bool         // time entries refused for this account
-	maxUpdate time.Time
+	res      *Result
+	mu       sync.Mutex
+	now      time.Time
+	statuses map[int]bool // status ID -> is_closed
+	// timeDenied lists projects whose time entries the account may not view.
+	timeDenied []int
+	maxUpdate  time.Time
 }
 
 func (r *run) count(resource string) *Counts {
@@ -272,6 +273,10 @@ func (s *Syncer) Run(ctx context.Context, kind Kind) (*Result, error) {
 
 	r.execute(ctx, kind, checkpoint)
 	stopHB()
+	if len(r.timeDenied) > 0 {
+		sort.Ints(r.timeDenied)
+		r.warn("time entries skipped for %d project(s) the API key may not view (HTTP 403/404): %v", len(r.timeDenied), r.timeDenied)
+	}
 
 	switch {
 	case ctx.Err() != nil:
@@ -603,22 +608,18 @@ func (r *run) fullProject(ctx context.Context, projectID int) error {
 }
 
 func (r *run) fetchTimeEntries(ctx context.Context, projectID int) ([]redmine.TimeEntry, error) {
-	r.mu.Lock()
-	off := r.timeOff
-	r.mu.Unlock()
-	if !r.opt.TimeEntries || off {
+	if !r.opt.TimeEntries {
 		return nil, nil
 	}
 	es, stats, err := r.src.ListTimeEntries(ctx, url.Values{"project_id": {strconv.Itoa(projectID)}})
 	var se *redmine.StatusError
 	if errors.As(err, &se) && (se.Status == http.StatusForbidden || se.Status == http.StatusNotFound) {
+		// Usually the time tracking module is off for this project or the
+		// account's role there lacks "View spent time". Other projects
+		// are still read; the run reports every project skipped.
 		r.mu.Lock()
-		first := !r.timeOff
-		r.timeOff = true
+		r.timeDenied = append(r.timeDenied, projectID)
 		r.mu.Unlock()
-		if first {
-			r.warn("time entries skipped: the API key may not view them (HTTP %d)", se.Status)
-		}
 		return nil, nil
 	}
 	if err != nil {
@@ -657,18 +658,20 @@ func (r *run) writeTimeEntries(ctx context.Context, tx pgx.Tx, tc *txCounts, pro
 		if e.Issue != nil {
 			issue = &e.Issue.ID
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO redmine_time_entries (redmine_id, project_redmine_id, issue_redmine_id,
+		var inserted bool
+		if err := tx.QueryRow(ctx, `INSERT INTO redmine_time_entries (redmine_id, project_redmine_id, issue_redmine_id,
 				user_redmine_id, activity, hours, spent_on, updated_on, last_synced_at, inactive_since)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL)
 			ON CONFLICT (redmine_id) DO UPDATE SET project_redmine_id = EXCLUDED.project_redmine_id,
 				issue_redmine_id = EXCLUDED.issue_redmine_id, user_redmine_id = EXCLUDED.user_redmine_id,
 				activity = EXCLUDED.activity, hours = EXCLUDED.hours, spent_on = EXCLUDED.spent_on,
-				updated_on = EXCLUDED.updated_on, last_synced_at = EXCLUDED.last_synced_at, inactive_since = NULL`,
-			e.ID, projectID, issue, e.User.ID, e.Activity.Name, e.Hours, spent, updated, r.now); err != nil {
+				updated_on = EXCLUDED.updated_on, last_synced_at = EXCLUDED.last_synced_at, inactive_since = NULL
+			RETURNING (xmax = 0)`,
+			e.ID, projectID, issue, e.User.ID, e.Activity.Name, e.Hours, spent, updated, r.now).Scan(&inserted); err != nil {
 			return err
 		}
+		tc.add("time_entries", func(c *Counts) { tally(c, inserted) })
 	}
-	tc.add("time_entries", func(c *Counts) { c.Fetched += len(es) })
 	tag, err := tx.Exec(ctx, `UPDATE redmine_time_entries SET inactive_since = $1
 		WHERE project_redmine_id = $2 AND inactive_since IS NULL AND NOT (redmine_id = ANY($3))`, r.now, projectID, seen)
 	if err != nil {
@@ -799,14 +802,17 @@ func (r *run) writeIssues(ctx context.Context, tx pgx.Tx, tc *txCounts, issues [
 	for _, id := range relKeys {
 		rel := rels[id]
 		relIDs = append(relIDs, int32(rel.ID))
-		if _, err := tx.Exec(ctx, `INSERT INTO redmine_issue_relations (redmine_id, issue_from_redmine_id,
+		var inserted bool
+		if err := tx.QueryRow(ctx, `INSERT INTO redmine_issue_relations (redmine_id, issue_from_redmine_id,
 				issue_to_redmine_id, relation_type, delay, last_synced_at)
 			VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (redmine_id) DO UPDATE SET
 				issue_from_redmine_id = EXCLUDED.issue_from_redmine_id, issue_to_redmine_id = EXCLUDED.issue_to_redmine_id,
-				relation_type = EXCLUDED.relation_type, delay = EXCLUDED.delay, last_synced_at = EXCLUDED.last_synced_at`,
-			rel.ID, rel.IssueID, rel.IssueToID, rel.RelationType, rel.Delay, r.now); err != nil {
+				relation_type = EXCLUDED.relation_type, delay = EXCLUDED.delay, last_synced_at = EXCLUDED.last_synced_at
+			RETURNING (xmax = 0)`,
+			rel.ID, rel.IssueID, rel.IssueToID, rel.RelationType, rel.Delay, r.now).Scan(&inserted); err != nil {
 			return fmt.Errorf("relation %d: %w", rel.ID, err)
 		}
+		tc.add("relations", func(c *Counts) { tally(c, inserted) })
 	}
 	// Each issue returns every relation it takes part in, so any stored
 	// relation touching these issues that was not returned is gone.
@@ -815,10 +821,7 @@ func (r *run) writeIssues(ctx context.Context, tx pgx.Tx, tc *txCounts, issues [
 	if err != nil {
 		return err
 	}
-	tc.add("relations", func(c *Counts) {
-		c.Fetched += len(relIDs)
-		c.Inactivated += int(tag.RowsAffected())
-	})
+	tc.add("relations", func(c *Counts) { c.Inactivated += int(tag.RowsAffected()) })
 	return nil
 }
 
@@ -981,4 +984,14 @@ func nullString(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// tally counts one fetched row as created or updated.
+func tally(c *Counts, inserted bool) {
+	c.Fetched++
+	if inserted {
+		c.Created++
+	} else {
+		c.Updated++
+	}
 }
