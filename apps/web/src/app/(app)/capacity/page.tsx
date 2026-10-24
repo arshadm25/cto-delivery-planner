@@ -37,7 +37,7 @@ export default function CapacityPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Capacity allocations</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Capacity allocations</h1>
       <p className="text-sm text-slate-600">
         Available and allocated hours per person or team and period. Only approved allocations feed forecasts and the workload view.
         Changing an approved allocation sends it back to draft. Showing {data.from} to {data.to}.
@@ -55,8 +55,8 @@ export default function CapacityPage() {
               <td className="px-2 py-2 text-slate-600">{a.assumptions}</td>
               <td className="px-2 py-2">{a.status}{a.approved_by ? ` by ${a.approved_by}` : ""}</td>
               <td className="px-2 py-2 space-x-1 whitespace-nowrap">
-                {a.status === "draft" && can(me, "approve_capacity") && <button className="rounded bg-slate-900 px-2 py-0.5 text-white" onClick={() => act(() => api(`/capacity-allocations/${a.id}/approve`, { method: "POST" }))}>Approve</button>}
-                {a.status === "draft" && <button className="rounded border px-2 py-0.5" onClick={() => act(() => api(`/capacity-allocations/${a.id}`, { method: "DELETE" }))}>Delete</button>}
+                {a.status === "draft" && can(me, "approve_capacity") && <button className="btn btn-primary" onClick={() => act(() => api(`/capacity-allocations/${a.id}/approve`, { method: "POST" }))}>Approve</button>}
+                {a.status === "draft" && <button className="btn btn-sm" onClick={() => act(() => api(`/capacity-allocations/${a.id}`, { method: "DELETE" }))}>Delete</button>}
               </td>
             </tr>
           ))}
@@ -98,25 +98,25 @@ function NewAllocation({ projects, onDone }: { projects: { id: number; name: str
     <Card title="Add allocation (saved as draft)">
       <form onSubmit={submit} className="space-y-3 text-sm">
         <div className="flex flex-wrap gap-2">
-          <select aria-label="Person" value={who} onChange={(e) => setWho(e.target.value)} className="rounded border px-2 py-1">
+          <select aria-label="Person" value={who} onChange={(e) => setWho(e.target.value)} className="field">
             <option value="">Team (enter name)</option>
             {(people.data?.people ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          {!who && <input placeholder="Team name" value={team} onChange={(e) => setTeam(e.target.value)} className="rounded border px-2 py-1" />}
-          <input required type="date" aria-label="Period start" value={start} onChange={(e) => setStart(e.target.value)} className="rounded border px-2 py-1" />
-          <input required type="date" aria-label="Period end" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded border px-2 py-1" />
-          <input type="number" min={0} step="0.5" placeholder="Available hours" value={available} onChange={(e) => setAvailable(e.target.value)} className="w-36 rounded border px-2 py-1" />
+          {!who && <input placeholder="Team name" value={team} onChange={(e) => setTeam(e.target.value)} className="field" />}
+          <input required type="date" aria-label="Period start" value={start} onChange={(e) => setStart(e.target.value)} className="field" />
+          <input required type="date" aria-label="Period end" value={end} onChange={(e) => setEnd(e.target.value)} className="field" />
+          <input type="number" min={0} step="0.5" placeholder="Available hours" value={available} onChange={(e) => setAvailable(e.target.value)} className="field w-36" />
         </div>
-        <input placeholder="Assumptions (leave, part-time, other commitments)" value={assumptions} onChange={(e) => setAssumptions(e.target.value)} className="w-full rounded border px-2 py-1" />
+        <input placeholder="Assumptions (leave, part-time, other commitments)" value={assumptions} onChange={(e) => setAssumptions(e.target.value)} className="field w-full" />
         <div className="grid gap-1 md:grid-cols-3">
           {projects.map((p) => (
             <label key={p.id} className="flex items-center justify-between gap-2">
               <span className="truncate">{p.name}</span>
-              <input type="number" min={0} step="0.5" placeholder="h" value={alloc[p.id] ?? ""} onChange={(e) => setAlloc({ ...alloc, [p.id]: e.target.value })} className="w-20 rounded border px-2 py-0.5" />
+              <input type="number" min={0} step="0.5" placeholder="h" value={alloc[p.id] ?? ""} onChange={(e) => setAlloc({ ...alloc, [p.id]: e.target.value })} className="field w-20" />
             </label>
           ))}
         </div>
-        <button className="rounded bg-slate-900 px-3 py-1 text-white">Save draft</button>
+        <button className="btn btn-primary">Save draft</button>
         <ErrorBox error={err} />
       </form>
     </Card>

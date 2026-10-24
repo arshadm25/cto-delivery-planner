@@ -1,12 +1,13 @@
 "use client";
 
-import { use, useState } from "react";
-import { api, Flag, FLAG_LABEL, Issue, Milestone, ProjectSummary } from "@/lib/api";
+import Link from "next/link";
+import { use, useEffect, useState } from "react";
+import { api, Flag, FLAG_LABEL, Issue, Milestone, Portfolio, ProjectSummary } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
-import { ago, date, hours, pct, tbd } from "@/lib/format";
+import { ago, date, hours, pct, relDays, tbd } from "@/lib/format";
 import { can, useMe } from "@/components/Shell";
-import { Card, ErrorBox, FlagChip, HealthBadge, Loading, Pager, SeverityBadge, Stat, Table } from "@/components/ui";
-import { DeliveryPanel } from "@/components/DeliveryPanel";
+import { Card, Empty, ErrorBox, FlagChip, HealthBadge, Loading, PageHeader, Pager, Progress, SeverityBadge, Stat, Table, Tabs } from "@/components/ui";
+import { Commitments, DeliverySummary, RiskHistory } from "@/components/DeliveryPanel";
 
 interface ProjectResponse {
   project: ProjectSummary;
@@ -14,78 +15,155 @@ interface ProjectResponse {
   data_gaps: string[];
 }
 
+type Tab = "risks" | "commitments" | "milestones" | "issues" | "history";
+const TABS: Tab[] = ["risks", "commitments", "milestones", "issues", "history"];
+
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data, error, loading, reload } = useApi<ProjectResponse>(`/projects/${id}`);
   const ms = useApi<{ milestones: Milestone[] }>(`/projects/${id}/milestones`);
+  // Names and health of the parent and subprojects come from the portfolio list.
+  const portfolio = useApi<Portfolio>("/portfolio/summary");
+  const [tab, setTab] = useState<Tab>("risks");
+  useEffect(() => {
+    const h = window.location.hash.slice(1) as Tab;
+    if (TABS.includes(h)) setTab(h);
+  }, []);
+  const pick = (t: Tab) => { setTab(t); history.replaceState(null, "", `#${t}`); };
+
   if (loading && !data) return <Loading />;
   if (error || !data) return <ErrorBox error={error} />;
   const p = data.project;
+  const c = p.rollup ?? p.issues;
+  const today = portfolio.data?.today ?? new Date().toISOString().slice(0, 10);
+  const byId = new Map((portfolio.data?.projects ?? []).map((x) => [x.id, x]));
+  const parent = p.parent_id !== null ? byId.get(p.parent_id) : undefined;
+  const subs = (p.subproject_ids ?? []).map((sid) => byId.get(sid)).filter((x): x is ProjectSummary => !!x);
+  const dev = c.open - c.awaiting_qa;
+  const coverage = p.rollup ? (p.rollup_estimate_coverage ?? null) : p.estimate_coverage;
+  const remaining = p.rollup ? (p.rollup_remaining_estimated_hours ?? null) : p.remaining_estimated_hours;
+  const milestones = ms.data?.milestones ?? [];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold">{p.name}</h1>
+    <>
+      <PageHeader title={p.name}
+        crumbs={[{ href: "/", label: "Overview" }, ...(parent ? [{ href: `/projects/${parent.id}`, label: parent.name }] : [])]}
+        subtitle={<>{subs.length > 0 && <>Includes {subs.length} subproject{subs.length === 1 ? "" : "s"} · </>}Last activity {ago(p.last_activity)}</>}>
         <HealthBadge state={p.health.state} />
-        {p.redmine_url && <a href={p.redmine_url} target="_blank" rel="noreferrer" className="text-sm text-sky-700 hover:underline">Open in Redmine</a>}
-        <span className="text-sm text-slate-500">Last activity {ago(p.last_activity)}</span>
-      </div>
-      {p.health.reasons.length > 0 && <p className="text-sm text-slate-600">Why: {p.health.reasons.join(", ")}</p>}
+        <span className="flex-1" />
+        {p.redmine_url && <a href={p.redmine_url} target="_blank" rel="noreferrer" className="btn">Open in Redmine ↗</a>}
+      </PageHeader>
 
-      <RolesCard project={p} onSaved={reload} />
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
-        <Stat label="Open" value={p.issues.open} />
-        <Stat label="Awaiting QA" value={p.issues.awaiting_qa} />
-        <Stat label="Closed" value={p.issues.closed} />
-        <Stat label="Overdue" value={p.issues.overdue} tone={p.issues.overdue ? "warn" : undefined} />
-        <Stat label="Blocked" value={p.issues.blocked} tone={p.issues.blocked ? "bad" : undefined} />
-        <Stat label="Remaining estimate" value={hours(p.remaining_estimated_hours)} />
-        <Stat label="Open dev issues estimated" value={pct(p.estimate_coverage)} />
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-700">
+        <RolesCard project={p} onSaved={reload} />
+        {p.health.reasons.length > 0 && <span className="text-slate-500">Why {p.health.state.replaceAll("_", " ")}: {p.health.reasons.join(", ")}</span>}
       </div>
 
-      <DeliveryPanel project={p} milestones={ms.data?.milestones ?? []} onChange={() => { reload(); ms.reload(); }} />
+      <DeliverySummary project={p} today={today} />
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Blockers and risks">
-          {data.blockers.length === 0 ? <p className="text-sm text-slate-500">No critical or high flags.</p> : (
-            <ul className="space-y-3 text-sm">
-              {data.blockers.map((f, i) => (
-                <li key={i}>
-                  <div className="flex items-center gap-2"><SeverityBadge severity={f.severity} /> <span className="font-medium">{f.title}</span></div>
-                  <div className="text-slate-600">{f.evidence}</div>
-                  <div className="text-slate-500">Next: {f.action}</div>
-                </li>
-              ))}
-            </ul>
-          )}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <Stat label="Open in dev" value={dev} sub={`+${c.awaiting_qa} awaiting QA`} />
+        <Stat label="Overdue" value={c.overdue} tone={c.overdue ? "warn" : undefined} sub="past their due date" />
+        <Stat label="Blocked" value={c.blocked} tone={c.blocked ? "bad" : undefined} sub="waiting on other work" />
+        <Stat label="Remaining estimate" value={hours(remaining)} sub={c.open_no_estimate ? `+${c.open_no_estimate} unestimated` : "all estimated"} />
+        <Stat label="Estimated" value={pct(coverage)} sub="of open dev issues" />
+        <Stat label="Closed" value={c.closed} sub={`of ${c.total} issues`} />
+      </div>
+
+      {subs.length > 0 && (
+        <Card title="Subprojects" action={<span className="text-xs text-slate-500">The numbers above include these</span>}>
+          <div className="grid gap-3 md:grid-cols-2">
+            {subs.map((s) => (
+              <Link key={s.id} href={`/projects/${s.id}`} className="flex items-center gap-3 rounded-lg border border-slate-200 px-4 py-3 transition hover:border-blue-300 hover:bg-blue-50/40">
+                <HealthBadge state={s.health.state} />
+                <span className="flex-1 font-semibold text-slate-900">{s.name}</span>
+                <span className="text-sm text-slate-500">{s.issues.open - s.issues.awaiting_qa} open · {s.issues.awaiting_qa} QA{s.issues.overdue ? ` · ${s.issues.overdue} overdue` : ""}</span>
+                <span className="text-blue-700" aria-hidden>›</span>
+              </Link>
+            ))}
+          </div>
         </Card>
-        <Card title="Missing data that limits forecast confidence">
-          {data.data_gaps.length === 0 ? <p className="text-sm text-slate-500">None found.</p> : (
-            <ul className="list-disc space-y-1 pl-5 text-sm">{data.data_gaps.map((g) => <li key={g}>{g}</li>)}</ul>
-          )}
-        </Card>
+      )}
+
+      <div className="space-y-4">
+        <Tabs value={tab} onChange={pick} tabs={[
+          { id: "risks", label: "Risks and gaps", count: data.blockers.length },
+          { id: "commitments", label: "Commitments" },
+          { id: "milestones", label: "Milestones", count: milestones.length },
+          { id: "issues", label: "Issues", count: c.open },
+          { id: "history", label: "History" },
+        ]} />
+
+        {tab === "risks" && (
+          <div className="grid gap-4 lg:grid-cols-3">
+            <RisksCard projectId={p.id} />
+            <Card title="Missing data that limits forecast confidence">
+              {data.data_gaps.length === 0 ? <p className="text-sm text-slate-500">None found.</p> : (
+                <ul className="space-y-2 text-sm">{data.data_gaps.map((g) => <li key={g} className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" aria-hidden />{g}</li>)}</ul>
+              )}
+            </Card>
+          </div>
+        )}
+        {tab === "commitments" && <Commitments project={p} milestones={milestones} onChange={() => { reload(); ms.reload(); }} />}
+        {tab === "milestones" && (
+          <Card title="Milestones">
+            {ms.error && <ErrorBox error={ms.error} />}
+            <Table head={["Milestone", "Due", "Status", "Progress", "Remaining estimate", "Baseline", "Flags"]}>
+              {milestones.map((m) => <MilestoneRow key={m.id} m={m} today={today} />)}
+            </Table>
+            {ms.data && milestones.length === 0 && <Empty>No milestones (Redmine versions) in this project.</Empty>}
+          </Card>
+        )}
+        {tab === "issues" && <IssuesCard projectId={id} />}
+        {tab === "history" && <RiskHistory projectId={p.id} />}
       </div>
+    </>
+  );
+}
 
-      <Card title="Milestones">
-        {ms.error && <ErrorBox error={ms.error} />}
-        <Table head={["Milestone", "Due", "Status", "Open / total", "Remaining estimate", "Baseline", "Flags"]}>
-          {(ms.data?.milestones ?? []).map((m) => (
-            <tr key={m.id}>
-              <td className="px-2 py-2">{m.redmine_url ? <a className="hover:underline" href={m.redmine_url} target="_blank" rel="noreferrer">{m.name}</a> : m.name}</td>
-              <td className="px-2 py-2">{date(m.due_date)}</td>
-              <td className="px-2 py-2">{m.status}</td>
-              <td className="px-2 py-2">{m.open} / {m.total}</td>
-              <td className="px-2 py-2">{hours(m.remaining_estimated_hours)}{m.open_no_estimate ? ` (+${m.open_no_estimate} unestimated)` : ""}</td>
-              <td className="px-2 py-2">{m.commitment?.status === "approved" ? date(m.commitment.baseline_date) : "TBD"}</td>
-              <td className="px-2 py-2 space-x-1">{m.flags.map((f, i) => <FlagChip key={i} kind={f.kind} />)}</td>
-            </tr>
-          ))}
-        </Table>
-      </Card>
+function RisksCard({ projectId }: { projectId: number }) {
+  const [all, setAll] = useState(false);
+  const { data, error } = useApi<{ flags: Flag[]; total: number }>(`/risks?project=${projectId}&per_page=200`);
+  const flags = data?.flags ?? [];
+  const serious = flags.filter((f) => f.severity === "critical" || f.severity === "high");
+  const shown = all || serious.length === 0 ? flags : serious;
+  return (
+    <Card title="Blockers and risks" className="lg:col-span-2"
+      action={flags.length > serious.length && serious.length > 0 && (
+        <button className="link text-sm" onClick={() => setAll(!all)}>{all ? "Show critical and high only" : `Show all ${flags.length}, including medium and low`}</button>
+      )}>
+      <ErrorBox error={error} />
+      {data && flags.length === 0 && <Empty>No flags on this project.</Empty>}
+      <ul className="-my-1 divide-y divide-slate-100">
+        {shown.map((f, i) => (
+          <li key={i} className="flex gap-3 py-3 text-sm">
+            <div className="w-16 shrink-0 pt-0.5"><SeverityBadge severity={f.severity} /></div>
+            <div className="min-w-0 space-y-0.5">
+              {f.redmine_url ? <a className="link" href={f.redmine_url} target="_blank" rel="noreferrer">{f.title}</a> : <div className="font-medium">{f.title}</div>}
+              <div className="text-slate-500">{f.evidence}</div>
+              <div className="text-slate-700">Next: {f.action}</div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
 
-      <IssuesCard projectId={id} />
-    </div>
+// One milestone row. Kept as its own component so editing can hook in here.
+function MilestoneRow({ m, today }: { m: Milestone; today: string }) {
+  return (
+    <tr>
+      <td className="px-2 py-2.5 font-medium">{m.redmine_url ? <a className="link" href={m.redmine_url} target="_blank" rel="noreferrer">{m.name}</a> : m.name}</td>
+      <td className="whitespace-nowrap px-2 py-2.5">{date(m.due_date)}<div className="text-xs text-slate-500">{relDays(m.due_date, today)}</div></td>
+      <td className="px-2 py-2.5">{m.status}</td>
+      <td className="px-2 py-2.5">
+        <div className="flex items-center gap-2"><Progress value={m.total ? (m.total - m.open) / m.total : 0} className="w-20" color="bg-blue-700" label="Closed share" /><span className="whitespace-nowrap tabular-nums text-slate-600">{m.open} of {m.total} open</span></div>
+      </td>
+      <td className="px-2 py-2.5">{hours(m.remaining_estimated_hours)}{m.open_no_estimate ? <span className="text-slate-500"> (+{m.open_no_estimate} unestimated)</span> : ""}</td>
+      <td className="whitespace-nowrap px-2 py-2.5">{m.commitment?.status === "approved" ? date(m.commitment.baseline_date) : "TBD"}</td>
+      <td className="space-x-1 px-2 py-2.5">{m.flags.map((f, i) => <FlagChip key={i} kind={f.kind} />)}</td>
+    </tr>
   );
 }
 
@@ -107,13 +185,13 @@ function RolesCard({ project, onSaved }: { project: ProjectSummary; onSaved: () 
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-4 text-sm">
+    <div className="flex flex-wrap items-center gap-3">
       {editing ? (
         <>
-          <label>Owner <input className="ml-1 rounded border px-2 py-1" value={owner} onChange={(e) => setOwner(e.target.value)} /></label>
-          <label>Tech lead <input className="ml-1 rounded border px-2 py-1" value={lead} onChange={(e) => setLead(e.target.value)} /></label>
-          <button onClick={save} className="rounded bg-slate-900 px-2 py-1 text-white">Save as verified</button>
-          <button onClick={() => setEditing(false)} className="rounded border px-2 py-1">Cancel</button>
+          <label className="flex items-center gap-1.5">Owner <input className="field" value={owner} onChange={(e) => setOwner(e.target.value)} /></label>
+          <label className="flex items-center gap-1.5">Tech lead <input className="field" value={lead} onChange={(e) => setLead(e.target.value)} /></label>
+          <button onClick={save} className="btn btn-primary btn-sm">Save as verified</button>
+          <button onClick={() => setEditing(false)} className="btn btn-sm">Cancel</button>
           <ErrorBox error={err} />
         </>
       ) : (
@@ -121,10 +199,26 @@ function RolesCard({ project, onSaved }: { project: ProjectSummary; onSaved: () 
           <span>Owner: <b>{tbd(project.owner)}</b></span>
           <span>Tech lead: <b>{tbd(project.tech_lead)}</b></span>
           {project.roles_verified_at && <span className="text-slate-500">verified {date(project.roles_verified_at)}</span>}
-          {can(me, "edit_project_roles") && <button onClick={() => setEditing(true)} className="rounded border px-2 py-1">Edit</button>}
+          {can(me, "edit_project_roles") && <button onClick={() => setEditing(true)} className="btn btn-sm">Edit</button>}
         </>
       )}
     </div>
+  );
+}
+
+// One issue row. Kept as its own component so editing can hook in here.
+function IssueRow({ is }: { is: Issue }) {
+  return (
+    <tr>
+      <td className="px-2 py-2.5">{is.redmine_url ? <a className="link" href={is.redmine_url} target="_blank" rel="noreferrer">{is.id}</a> : is.id}</td>
+      <td className="px-2 py-2.5">{is.subject}</td>
+      <td className="whitespace-nowrap px-2 py-2.5">{is.status}</td>
+      <td className="whitespace-nowrap px-2 py-2.5">{is.assignee_name ?? <span className="text-slate-500">TBD</span>}</td>
+      <td className="whitespace-nowrap px-2 py-2.5">{date(is.due_date)}</td>
+      <td className="whitespace-nowrap px-2 py-2.5">{hours(is.estimated_hours)}</td>
+      <td className="whitespace-nowrap px-2 py-2.5">{hours(is.spent_hours)}</td>
+      <td className="space-x-1 px-2 py-2.5">{is.flags.map((f) => <FlagChip key={f} kind={f} />)}</td>
+    </tr>
   );
 }
 
@@ -141,35 +235,25 @@ function IssuesCard({ projectId }: { projectId: string }) {
 
   return (
     <Card title="Issues">
-      <div className="mb-3 flex flex-wrap gap-2 text-sm">
-        <select aria-label="Status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="rounded border px-2 py-1">
+      <div className="mb-3 flex flex-wrap gap-2">
+        <select aria-label="Status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="field">
           <option value="open">Open</option><option value="awaiting_qa">Awaiting QA</option><option value="closed">Closed</option><option value="all">All</option>
         </select>
-        <select aria-label="Flag" value={flag} onChange={(e) => { setFlag(e.target.value); setPage(1); }} className="rounded border px-2 py-1">
+        <select aria-label="Flag" value={flag} onChange={(e) => { setFlag(e.target.value); setPage(1); }} className="field">
           <option value="">Any flag</option>
           {Object.entries(FLAG_LABEL).filter(([k]) => !k.startsWith("milestone") && !["forecast_after_baseline", "capacity_risk", "no_baseline", "release_readiness"].includes(k))
             .map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} className="rounded border px-2 py-1">
+        <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} className="field">
           <option value="id">By ID</option><option value="due">By due date</option><option value="updated">Recently updated</option>
         </select>
-        <input aria-label="Search" placeholder="Search subject or #ID" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} className="rounded border px-2 py-1" />
+        <input aria-label="Search" placeholder="Search subject or #ID" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} className="field w-56" />
       </div>
       <ErrorBox error={error} />
       <Table head={["#", "Subject", "Status", "Assignee", "Due", "Estimate", "Spent", "Flags"]}>
-        {(data?.issues ?? []).map((is) => (
-          <tr key={is.id}>
-            <td className="px-2 py-2">{is.redmine_url ? <a className="text-sky-700 hover:underline" href={is.redmine_url} target="_blank" rel="noreferrer">{is.id}</a> : is.id}</td>
-            <td className="px-2 py-2">{is.subject}</td>
-            <td className="px-2 py-2">{is.status}</td>
-            <td className="px-2 py-2">{is.assignee_name ?? "TBD"}</td>
-            <td className="px-2 py-2">{date(is.due_date)}</td>
-            <td className="px-2 py-2">{hours(is.estimated_hours)}</td>
-            <td className="px-2 py-2">{hours(is.spent_hours)}</td>
-            <td className="px-2 py-2 space-x-1">{is.flags.map((f) => <FlagChip key={f} kind={f} />)}</td>
-          </tr>
-        ))}
+        {(data?.issues ?? []).map((is) => <IssueRow key={is.id} is={is} />)}
       </Table>
+      {data && data.issues.length === 0 && <Empty>No issues match.</Empty>}
       {data && <Pager page={data.page} perPage={data.per_page} total={data.total} onPage={setPage} />}
     </Card>
   );

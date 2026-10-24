@@ -15,6 +15,7 @@ test("baseline is proposed, approved, and kept separate from the forecast", asyn
   await page.goto("/projects/10");
   await expect(page.getByText("Approved baseline")).toBeVisible();
   await expect(page.getByText("No approved commitment")).toBeVisible();
+  await page.getByRole("tab", { name: "Commitments" }).click();
   await page.getByPlaceholder("Title").fill("Phase 1 go-live");
   await page.getByLabel("Baseline date").fill("2027-03-31");
   await page.getByPlaceholder("Reason or source of the commitment").fill("Fictional signed plan");
@@ -24,10 +25,10 @@ test("baseline is proposed, approved, and kept separate from the forecast", asyn
 
   const cto = await browser.newPage();
   await login(cto, "cto@example.test");
-  await cto.goto("/projects/10");
+  await cto.goto("/projects/10#commitments");
   await cto.getByRole("button", { name: "Approve" }).click();
   await expect(cto.getByRole("cell", { name: "approved" })).toBeVisible();
-  await expect(cto.getByText("2027-03-31").first()).toBeVisible();
+  await expect(cto.getByText("31 Mar 2027").first()).toBeVisible();
   await expect(cto.getByText("Forecast", { exact: true }).first()).toBeVisible();
   await expect(cto.getByText("Actual", { exact: true }).first()).toBeVisible();
 });

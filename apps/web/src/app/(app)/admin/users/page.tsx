@@ -22,7 +22,7 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Users</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Users</h1>
       <p className="text-sm text-slate-600">Administrators and the CTO see every project. Other roles see only the projects assigned here.</p>
       <ErrorBox error={err} />
       <NewUser onDone={reload} />
@@ -33,7 +33,7 @@ export default function UsersPage() {
               <td className="px-2 py-2">{u.display_name}</td>
               <td className="px-2 py-2">{u.email}</td>
               <td className="px-2 py-2">
-                <select aria-label={`Role for ${u.email}`} value={u.role} onChange={(e) => act(() => api(`/admin/users/${u.id}`, { method: "PATCH", body: { role: e.target.value } }))} className="rounded border px-1 py-0.5">
+                <select aria-label={`Role for ${u.email}`} value={u.role} onChange={(e) => act(() => api(`/admin/users/${u.id}`, { method: "PATCH", body: { role: e.target.value } }))} className="field">
                   {Object.entries(ROLE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </td>
@@ -45,10 +45,10 @@ export default function UsersPage() {
               </td>
               <td className="px-2 py-2">{dateTime(u.last_login_at)}</td>
               <td className="px-2 py-2 space-x-2">
-                <button className="rounded border px-2 py-0.5" onClick={() => act(() => api(`/admin/users/${u.id}`, { method: "PATCH", body: { disabled: !u.disabled } }))}>
+                <button className="btn btn-sm" onClick={() => act(() => api(`/admin/users/${u.id}`, { method: "PATCH", body: { disabled: !u.disabled } }))}>
                   {u.disabled ? "Enable" : "Disable"}
                 </button>
-                <button className="rounded border px-2 py-0.5" onClick={() => {
+                <button className="btn btn-sm" onClick={() => {
                   const pw = prompt("New password (at least 12 characters)");
                   if (pw) act(() => api(`/admin/users/${u.id}/password`, { method: "POST", body: { password: pw } }));
                 }}>Reset password</button>
@@ -64,16 +64,16 @@ export default function UsersPage() {
 function ProjectPicker({ ids, options, onSave }: { ids: number[]; options: { id: number; name: string }[]; onSave: (ids: number[]) => void }) {
   const [open, setOpen] = useState(false);
   const [sel, setSel] = useState<number[]>(ids);
-  if (!open) return <button className="text-sky-700 hover:underline" onClick={() => setOpen(true)}>{ids.length} assigned</button>;
+  if (!open) return <button className="link" onClick={() => setOpen(true)}>{ids.length} assigned</button>;
   return (
-    <div className="max-h-56 space-y-1 overflow-y-auto rounded border p-2">
+    <div className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
       {options.map((o) => (
         <label key={o.id} className="flex items-center gap-2">
           <input type="checkbox" checked={sel.includes(o.id)} onChange={(e) => setSel(e.target.checked ? [...sel, o.id] : sel.filter((x) => x !== o.id))} />
           {o.name}
         </label>
       ))}
-      <button className="mt-1 rounded bg-slate-900 px-2 py-0.5 text-white" onClick={() => { onSave(sel); setOpen(false); }}>Save</button>
+      <button className="btn btn-primary btn-sm mt-1" onClick={() => { onSave(sel); setOpen(false); }}>Save</button>
     </div>
   );
 }
@@ -93,13 +93,13 @@ function NewUser({ onDone }: { onDone: () => void }) {
   return (
     <Card title="Add user">
       <form onSubmit={submit} className="flex flex-wrap items-end gap-2 text-sm">
-        <input required type="email" placeholder="Email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} className="rounded border px-2 py-1" />
-        <input required placeholder="Display name" value={f.display_name} onChange={(e) => setF({ ...f, display_name: e.target.value })} className="rounded border px-2 py-1" />
-        <input required type="password" minLength={12} placeholder="Initial password (12+)" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} className="rounded border px-2 py-1" />
-        <select value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as Role })} className="rounded border px-2 py-1">
+        <input required type="email" placeholder="Email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} className="field" />
+        <input required placeholder="Display name" value={f.display_name} onChange={(e) => setF({ ...f, display_name: e.target.value })} className="field" />
+        <input required type="password" minLength={12} placeholder="Initial password (12+)" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} className="field" />
+        <select value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as Role })} className="field">
           {Object.entries(ROLE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <button className="rounded bg-slate-900 px-3 py-1 text-white">Add</button>
+        <button className="btn btn-primary">Add</button>
         <ErrorBox error={err} />
       </form>
     </Card>
