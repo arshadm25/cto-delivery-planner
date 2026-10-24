@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { FLAG_LABEL, Issue, Milestone, Person, PlanField, planIssues } from "@/lib/api";
+import { createTask, deleteTask, FLAG_LABEL, Issue, Milestone, Person, PlanField, planIssues, updateTask } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { date, hours } from "@/lib/format";
 import { can, useMe } from "./Shell";
@@ -37,10 +37,10 @@ export function IssuesCard({ projectId, milestones, onChange }: { projectId: num
   const { data, error, reload } = useApi<{ issues: Issue[]; total: number; page: number; per_page: number }>(`/projects/${projectId}/issues?${qs}`);
   const resetPage = () => { setPage(1); setSelected(new Set()); };
 
-  async function apply(ids: number[], changes: Changes) {
+  async function act(fn: () => Promise<unknown>) {
     setErr(null);
     try {
-      await planIssues(projectId, ids, changes);
+      await fn();
       setEditing(null);
       setSelected(new Set());
       reload();
@@ -49,6 +49,7 @@ export function IssuesCard({ projectId, milestones, onChange }: { projectId: num
       setErr(e as Error);
     }
   }
+  const apply = (ids: number[], changes: Changes) => act(() => planIssues(projectId, ids, changes));
 
   const rows = data?.issues ?? [];
   const allOnPage = rows.length > 0 && rows.every((r) => selected.has(r.id));
@@ -83,6 +84,8 @@ export function IssuesCard({ projectId, milestones, onChange }: { projectId: num
           onApply={(c) => apply([...selected], c)} onClear={() => setSelected(new Set())} />
       )}
       <ErrorBox error={err ?? error} />
+      {editable && <AddTask milestones={milestones} people={people.data?.people ?? []}
+        onAdd={(subject, changes) => act(() => createTask(projectId, subject, changes))} />}
       {editable && (
         <label className="mb-1 flex items-center gap-2 text-xs text-slate-500">
           <input type="checkbox" checked={allOnPage} onChange={() => setSelected(allOnPage ? new Set() : new Set(rows.map((r) => r.id)))} />
@@ -96,7 +99,10 @@ export function IssuesCard({ projectId, milestones, onChange }: { projectId: num
         ) : (
           <tr key={is.id} className={selected.has(is.id) ? "bg-blue-50" : undefined}>
             {editable && <td className="px-2 py-2"><input type="checkbox" aria-label={`Select issue ${is.id}`} checked={selected.has(is.id)} onChange={() => toggle(is.id)} /></td>}
-            <td className="px-2 py-2">{is.redmine_url ? <a className="link" href={is.redmine_url} target="_blank" rel="noreferrer">{is.id}</a> : is.id}</td>
+            <td className="px-2 py-2">
+              {is.planner_task ? <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-violet-800" title="Created in the planner; not in Redmine">task</span>
+                : is.redmine_url ? <a className="link" href={is.redmine_url} target="_blank" rel="noreferrer">{is.id}</a> : is.id}
+            </td>
             <td className="px-2 py-2">{is.subject}</td>
             <td className="px-2 py-2">{is.status}</td>
             <td className="px-2 py-2"><Planned issue={is} field="assignee_id">{is.assignee_name ?? "TBD"}</Planned></td>
@@ -105,7 +111,17 @@ export function IssuesCard({ projectId, milestones, onChange }: { projectId: num
             <td className="px-2 py-2"><Planned issue={is} field="estimated_hours">{hours(is.estimated_hours)}</Planned></td>
             <td className="px-2 py-2">{hours(is.spent_hours)}</td>
             <td className="px-2 py-2 space-x-1">{is.flags.map((f) => <FlagChip key={f} kind={f} />)}</td>
-            {editable && <td className="px-2 py-2"><button className="btn btn-sm" onClick={() => setEditing(is.id)}>Edit</button></td>}
+            {editable && (
+              <td className="space-x-1 whitespace-nowrap px-2 py-2">
+                <button className="btn btn-sm" onClick={() => setEditing(is.id)}>Edit</button>
+                {is.planner_task && (
+                  <>
+                    <button className="btn btn-sm" onClick={() => act(() => updateTask(projectId, is.id, { done: !is.is_closed }))}>{is.is_closed ? "Reopen" : "Done"}</button>
+                    <button className="btn btn-sm" onClick={() => { if (confirm(`Delete task “${is.subject}”?`)) act(() => deleteTask(projectId, is.id)); }}>Delete</button>
+                  </>
+                )}
+              </td>
+            )}
           </tr>
         ))}
       </Table>
@@ -115,9 +131,48 @@ export function IssuesCard({ projectId, milestones, onChange }: { projectId: num
   );
 }
 
+// AddTask creates a planner task for work that is not in Redmine.
+function AddTask({ milestones, people, onAdd }: {
+  milestones: Milestone[]; people: Person[]; onAdd: (subject: string, changes: Changes) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ subject: "", version_id: "", assignee_id: "", estimated_hours: "", due_date: "" });
+  if (!open) return <button className="btn btn-sm mb-3" onClick={() => setOpen(true)}>Add a task</button>;
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const c: Changes = {};
+    if (f.version_id) c.version_id = Number(f.version_id);
+    if (f.assignee_id) c.assignee_id = Number(f.assignee_id);
+    if (f.estimated_hours) c.estimated_hours = Number(f.estimated_hours);
+    if (f.due_date) c.due_date = f.due_date;
+    await onAdd(f.subject, c);
+    setF({ subject: "", version_id: "", assignee_id: "", estimated_hours: "", due_date: "" });
+  }
+  return (
+    <form onSubmit={submit} className="mb-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm">
+      <div className="mb-2 font-medium text-slate-700">New task (kept in the planner, not sent to Redmine)</div>
+      <div className="flex flex-wrap items-end gap-2">
+        <input required maxLength={255} aria-label="Task subject" placeholder="What needs doing" value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} className="field min-w-64 flex-1" />
+        <select aria-label="Task milestone" value={f.version_id} onChange={(e) => setF({ ...f, version_id: e.target.value })} className="field">
+          <option value="">No milestone</option>
+          {milestones.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+        <select aria-label="Task assignee" value={f.assignee_id} onChange={(e) => setF({ ...f, assignee_id: e.target.value })} className="field">
+          <option value="">Unassigned</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <input type="number" min={0} step="0.5" aria-label="Task estimate" placeholder="hours" value={f.estimated_hours} onChange={(e) => setF({ ...f, estimated_hours: e.target.value })} className="field w-24" />
+        <input type="date" aria-label="Task due date" value={f.due_date} onChange={(e) => setF({ ...f, due_date: e.target.value })} className="field" />
+        <button className="btn btn-primary">Add task</button>
+        <button type="button" className="btn" onClick={() => setOpen(false)}>Close</button>
+      </div>
+    </form>
+  );
+}
+
 // Planned marks a value set in the planner and shows Redmine's value on hover.
 function Planned({ issue, field, milestones, children }: { issue: Issue; field: PlanField; milestones?: Milestone[]; children: React.ReactNode }) {
-  if (!issue.planned?.includes(field)) return <>{children}</>;
+  if (issue.planner_task || !issue.planned?.includes(field)) return <>{children}</>;
   let was = issue.redmine_values?.[field];
   if (field === "version_id" && was != null) was = milestones?.find((m) => m.id === was)?.name ?? `Version ${was}`;
   if (field === "assignee_id" && was != null) was = `user #${was}`;

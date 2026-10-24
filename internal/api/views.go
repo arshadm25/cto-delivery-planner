@@ -73,6 +73,9 @@ type ProjectSummary struct {
 	RedmineURL       string         `json:"redmine_url,omitempty"`
 	// Delivery holds baseline, forecast and actual (Phase 4).
 	Delivery *Delivery `json:"delivery,omitempty"`
+	// ownDelivery is the parent's forecast without its subprojects, shown
+	// to a viewer who cannot see all of them.
+	ownDelivery *Delivery
 }
 
 func (s *Server) analyze(ctx context.Context) (*analysis, error) {
@@ -271,6 +274,9 @@ type ProjectView struct {
 	// Rollup. Both are null when Rollup is null or the value is unknown.
 	RollupRemainingEstimatedHours *float64 `json:"rollup_remaining_estimated_hours"`
 	RollupEstimateCoverage        *float64 `json:"rollup_estimate_coverage"`
+	// Delivery covers the project and its subprojects when the viewer may
+	// see all of them, and the project alone otherwise.
+	Delivery *Delivery `json:"delivery,omitempty"`
 }
 
 // withSubprojects wraps summaries with their subproject IDs and rollups,
@@ -285,7 +291,8 @@ func (s *Server) withSubprojects(r *http.Request, a *analysis, ps []*ProjectSumm
 	}
 	out := make([]ProjectView, len(ps))
 	for i, p := range ps {
-		v := ProjectView{ProjectSummary: p, SubprojectIDs: []int{}}
+		v := ProjectView{ProjectSummary: p, SubprojectIDs: []int{}, Delivery: p.Delivery}
+		allVisible := true
 		sum := p.Issues
 		var hours float64
 		anyHours := p.RemainingEstimatedHours != nil
@@ -305,6 +312,9 @@ func (s *Server) withSubprojects(r *http.Request, a *analysis, ps []*ProjectSumm
 			seen[id] = true
 			stack = append(stack, children[id]...)
 			c := a.projects[id]
+			if c != nil && !acc.Allows(id) {
+				allVisible = false
+			}
 			if c == nil || !acc.Allows(id) {
 				continue
 			}
@@ -327,6 +337,9 @@ func (s *Server) withSubprojects(r *http.Request, a *analysis, ps []*ProjectSumm
 				c := float64(dev-sum.OpenNoEstimate) / float64(dev)
 				v.RollupEstimateCoverage = &c
 			}
+		}
+		if !allVisible && p.ownDelivery != nil {
+			v.Delivery = p.ownDelivery
 		}
 		sort.Ints(v.SubprojectIDs)
 		out[i] = v
@@ -512,7 +525,8 @@ type IssueView struct {
 }
 
 func (s *Server) issueURL(id int) string {
-	if s.cfg.RedmineURL == "" {
+	// Planner tasks (negative IDs) are not in Redmine.
+	if s.cfg.RedmineURL == "" || id < 0 {
 		return ""
 	}
 	return s.cfg.RedmineURL + "/issues/" + strconv.Itoa(id)
@@ -844,6 +858,10 @@ func (s *Server) handlePutRules(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.StaleAfterDays < 1 || in.StaleAfterDays > 365 || in.MilestoneWarnDays < 1 || in.MilestoneWarnDays > 365 {
 		writeError(w, http.StatusBadRequest, "day thresholds must be between 1 and 365")
+		return
+	}
+	if in.QADays < 0 || in.QADays > 120 {
+		writeError(w, http.StatusBadRequest, "QA days must be between 0 and 120")
 		return
 	}
 	if err := s.store.SaveRules(r.Context(), in, current(r).user.ID, actorOf(r)); err != nil {

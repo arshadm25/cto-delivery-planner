@@ -11,6 +11,7 @@ interface Rules {
   high_priorities: string[];
   release_keywords: string[];
   awaiting_qa_statuses: string[];
+  qa_days: number;
 }
 
 interface Calendar {
@@ -106,6 +107,9 @@ export default function SettingsPage() {
           </label>
           <label className="block">Statuses meaning &quot;awaiting QA&quot; (comma separated, as named in Redmine). These issues stay open but are not counted as remaining development work or flagged as stale.
             <input value={(form.awaiting_qa_statuses ?? []).join(", ")} onChange={(e) => setForm({ ...form, awaiting_qa_statuses: list(e.target.value) })} className="field mt-1 w-full" />
+          </label>
+          <label className="block">Working days of QA after development (0 leaves QA out). With this set, forecasts give a release date, not just a development-done date.
+            <input type="number" min={0} max={120} value={form.qa_days ?? 0} onChange={(e) => setForm({ ...form, qa_days: +e.target.value })} className="field mt-1 w-32" />
           </label>
           <button className="btn btn-primary">Save</button>
           {msg && <p className="text-emerald-700">{msg}</p>}

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -196,6 +197,27 @@ func loadPlans(ctx context.Context, tx pgx.Tx, d *Dataset) error {
 	}
 	d.Versions = append(d.Versions, ms...)
 
+	rows, err = tx.Query(ctx, `SELECT -t.id, t.project_redmine_id, t.subject, t.closed_on, t.created_at, t.updated_at
+		FROM planner_tasks t JOIN redmine_projects p ON p.redmine_id = t.project_redmine_id AND p.in_scope AND p.inactive_since IS NULL
+		ORDER BY t.id`)
+	if err != nil {
+		return err
+	}
+	tasks, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (risks.Issue, error) {
+		is := risks.Issue{PlannerTask: true, TrackerName: "Planner task", PriorityName: "Normal"}
+		err := r.Scan(&is.ID, &is.ProjectID, &is.Subject, &is.ClosedOn, &is.CreatedOn, &is.UpdatedOn)
+		is.IsClosed = is.ClosedOn != nil
+		is.StatusName = "Open"
+		if is.IsClosed {
+			is.StatusName = "Done"
+		}
+		return is, err
+	})
+	if err != nil {
+		return err
+	}
+	d.Issues = append(d.Issues, tasks...)
+
 	rows, err = tx.Query(ctx, `SELECT p.issue_redmine_id, p.estimated_hours::float8, p.due_date, p.assignee_redmine_id, u.name, p.version_id
 		FROM issue_plans p LEFT JOIN redmine_users u ON u.redmine_id = p.assignee_redmine_id`)
 	if err != nil {
@@ -250,6 +272,33 @@ func loadPlans(ctx context.Context, tx pgx.Tx, d *Dataset) error {
 		}
 	}
 	return nil
+}
+
+// Subtree returns the project and its in-scope descendants, the project
+// first and the rest by ID.
+func (d *Dataset) Subtree(id int) []int {
+	children := map[int][]int{}
+	for _, p := range d.Projects {
+		if p.ParentID != nil {
+			children[*p.ParentID] = append(children[*p.ParentID], p.ID)
+		}
+	}
+	out := []int{id}
+	seen := map[int]bool{id: true}
+	stack := append([]int(nil), children[id]...)
+	var rest []int
+	for len(stack) > 0 {
+		c := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if seen[c] {
+			continue
+		}
+		seen[c] = true
+		rest = append(rest, c)
+		stack = append(stack, children[c]...)
+	}
+	sort.Ints(rest)
+	return append(out, rest...)
 }
 
 // ProjectIssues returns the issues of one project.

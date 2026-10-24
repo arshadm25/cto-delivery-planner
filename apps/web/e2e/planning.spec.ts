@@ -78,3 +78,25 @@ test("a team is built from Redmine members", async ({ page }) => {
   await expect(page.getByRole("cell", { name: "Fictional squad" })).toBeVisible();
   await page.getByLabel("Person or team").selectOption({ label: "Fictional squad" });
 });
+
+test("a planner task is added, finished, and capacity is given from the project", async ({ page }) => {
+  await login(page, "pm@example.test");
+  await page.goto("/projects/10#issues");
+  await page.getByRole("button", { name: "Add a task" }).click();
+  await page.getByLabel("Task subject").fill("Fictional client sign-off");
+  await page.getByLabel("Task estimate").fill("3");
+  await page.getByRole("button", { name: "Add task" }).click();
+  const row = page.getByRole("row", { name: /Fictional client sign-off/ });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("row", { name: /Fictional client sign-off/ })).toHaveCount(0);
+
+  await page.getByRole("tab", { name: "Capacity" }).or(page.getByRole("button", { name: "Capacity" })).first().click();
+  await expect(page.getByText("Capacity for this project")).toBeVisible();
+  await page.getByLabel("Who").selectOption({ index: 1 });
+  await page.getByLabel("From").fill("2026-11-02");
+  await page.getByLabel("To").fill("2026-11-27");
+  await page.getByLabel("Hours on this project").fill("40");
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByText("draft", { exact: true }).first()).toBeVisible();
+});

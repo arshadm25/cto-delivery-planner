@@ -33,7 +33,9 @@ type Issue struct {
 	ClosedOn     *time.Time `json:"closed_on"`
 	// Planned names the fields whose value was set in the planner, and
 	// RedmineValues keeps what Redmine has for those fields.
-	Planned       []string       `json:"planned,omitempty"`
+	Planned []string `json:"planned,omitempty"`
+	// PlannerTask is true for a task created in the planner (negative ID).
+	PlannerTask   bool           `json:"planner_task,omitempty"`
 	RedmineValues map[string]any `json:"redmine_values,omitempty"`
 }
 
@@ -74,6 +76,9 @@ type Rules struct {
 	// undelivered, but are left out of remaining development effort and
 	// of the stale, missing-estimate and over-estimate flags.
 	AwaitingQAStatuses []string `json:"awaiting_qa_statuses"`
+	// QADays is the working days of testing after development is done. The
+	// forecast adds them, so it is a release date. 0 leaves QA out.
+	QADays int `json:"qa_days"`
 }
 
 // DefaultRules are used until settings say otherwise. They are starting

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { api, Commitment, Milestone, ProjectSummary } from "@/lib/api";
+import { api, Commitment, Milestone, ProjectSummary, ScopeChange } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { date, daysBetween, shortDate } from "@/lib/format";
 import { can, useMe } from "./Shell";
@@ -26,12 +26,17 @@ export function DeliverySummary({ project, today }: { project: ProjectSummary; t
   return (
     <Card title="Delivery" action={<span className="flex items-center gap-2 text-sm text-slate-600">{STATUS_TEXT[d.status] ?? d.status}<DeliveryDelta d={d} /></span>}>
       <Timeline today={today} baseline={d.baseline} forecast={d.forecast} actual={d.actual} />
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      {(d.covers_project_ids?.length ?? 0) > 1 && (
+        <p className="mb-2 text-sm text-slate-600">Planned together with its {d.covers_project_ids!.length - 1} subproject{d.covers_project_ids!.length === 2 ? "" : "s"}: one baseline, one forecast and their combined capacity.</p>
+      )}
+      <div className={`mt-4 grid gap-3 ${d.dev_done ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         <DateBox label="Approved baseline" value={d.baseline} note={d.baseline_source ?? "No approved commitment"} />
-        <DateBox label="Forecast" value={d.forecast} note={`${d.method.replaceAll("_", " ")} · confidence ${d.confidence}`}
+        {d.dev_done && <DateBox label="Development done" value={d.dev_done} note={`then ${d.inputs.qa_days ?? "?"} working days of QA`} />}
+        <DateBox label={d.dev_done ? "Forecast release" : "Forecast"} value={d.forecast} note={`${d.method.replaceAll("_", " ")} · confidence ${d.confidence}`}
           tone={d.status === "at_risk" || d.status === "late" ? "text-amber-700" : undefined} />
         <DateBox label="Actual" value={d.actual} note={d.actual ? "Recorded" : "Not delivered"} />
       </div>
+      {d.scope && <ScopeLine scope={d.scope} />}
       <details className="mt-3 text-sm">
         <summary className="cursor-pointer text-slate-600 hover:text-slate-900">How this forecast was made</summary>
         <ul className="mt-2 list-disc pl-5 text-slate-600">{d.assumptions.map((a) => <li key={a}>{a}</li>)}</ul>
@@ -42,6 +47,23 @@ export function DeliverySummary({ project, today }: { project: ProjectSummary; t
         </dl>
       </details>
     </Card>
+  );
+}
+
+// ScopeLine shows how the work changed since the baseline froze its scope.
+function ScopeLine({ scope: s }: { scope: ScopeChange }) {
+  const hours = (h: number) => `${h > 0 ? "+" : ""}${Math.round(h * 10) / 10} h`;
+  const changed = s.added.length > 0 || s.removed.length > 0 || Math.abs(s.estimate_change_hours) >= 0.1;
+  return (
+    <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${changed ? "bg-amber-50 text-amber-900" : "bg-slate-50 text-slate-600"}`}>
+      {changed ? (
+        <>
+          Scope since the baseline: {s.added.length} issue{s.added.length === 1 ? "" : "s"} added, {s.removed.length} removed
+          {Math.abs(s.estimate_change_hours) >= 0.1 && <>, estimates {hours(s.estimate_change_hours)} on the original issues</>}.
+          {" "}Now {s.current_issues} issues and {Math.round(s.current_hours)} h estimated, against {s.baseline_issues} issues and {Math.round(s.baseline_hours)} h at approval.
+        </>
+      ) : <>Scope unchanged since the baseline was approved ({s.baseline_issues} issues, {Math.round(s.baseline_hours)} h estimated).</>}
+    </p>
   );
 }
 

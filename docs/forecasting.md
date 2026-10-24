@@ -54,6 +54,17 @@ Decided on 2026-10-24: planning happens in the planner, not in Redmine. Nothing 
 - **Audit.** Every change is written to `audit_events`.
 - **Storage.** Values are in `issue_plans`, `planner_milestones`, `planner_teams` and `planner_team_members` (migration 0004).
 
+## Parents, milestone order, scope and QA (2026-10-24)
+
+- **Parent projects.** A project with in-scope subprojects is planned with them: its whole-project forecast covers its own issues and every subproject's, with their capacity added up, and its whole-project baseline is the baseline for all of them. Subprojects keep their own forecasts too. A viewer who cannot see every subproject gets the parent's own forecast instead, so hidden work never leaks through it. The weekly report uses the combined forecast.
+- **Milestones one after another.** Milestone baselines in a project are forecast in baseline-date order. Each milestone starts after the open work of the approved ones before it, since the same people deliver them. Before this, every milestone assumed the project's whole capacity.
+- **Scope frozen at approval.** Approving a baseline stores the issues in its scope and their estimates (`commitment_scope`). The Delivery card then shows issues added and removed since, and how estimates moved. Baselines approved before this change have no frozen scope.
+- **QA days.** Settings → Rule settings → "Working days of QA after development". When it is set, the forecast adds those working days after development finishes, shows both dates, and is a release date. When only QA is left, the forecast is today plus the QA days, with low confidence. 0 (the default) keeps the old behaviour.
+
+## Planner tasks
+
+Work that is not in Redmine can be added as a task on the project's Issues tab. A task has a subject and takes an estimate, due date, assignee and milestone like any issue. It counts in forecasts, flags, workload and scope. It can be marked done, reopened or deleted. Tasks are stored in `planner_tasks` and are shown as issues with negative IDs. Redmine issues still open and close only in Redmine.
+
 ## Awaiting QA
 
 Some open Redmine statuses mean development is finished and the work is waiting for testing. At discovery (P1-12), 67% of open in-scope issues were in *Fixed Not Tested*. The CTO decided on 2026-10-22 that these issues count separately.

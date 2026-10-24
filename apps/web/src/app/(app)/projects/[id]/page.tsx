@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { api, Flag, Milestone, Portfolio, ProjectSummary } from "@/lib/api";
+import { api, Flag, Milestone, Person, Portfolio, ProjectSummary } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { ago, date, hours, pct, tbd } from "@/lib/format";
 import { can, useMe } from "@/components/Shell";
@@ -10,6 +10,7 @@ import { Card, Empty, ErrorBox, HealthBadge, Loading, PageHeader, SeverityBadge,
 import { Commitments, DeliverySummary, RiskHistory } from "@/components/DeliveryPanel";
 import { IssuesCard } from "@/components/IssueEditor";
 import { MilestonesCard } from "@/components/MilestoneEditor";
+import { ProjectCapacity } from "@/components/ProjectCapacity";
 
 interface ProjectResponse {
   project: ProjectSummary;
@@ -17,8 +18,8 @@ interface ProjectResponse {
   data_gaps: string[];
 }
 
-type Tab = "risks" | "commitments" | "milestones" | "issues" | "history";
-const TABS: Tab[] = ["risks", "commitments", "milestones", "issues", "history"];
+type Tab = "risks" | "commitments" | "milestones" | "issues" | "capacity" | "history";
+const TABS: Tab[] = ["risks", "commitments", "milestones", "issues", "capacity", "history"];
 
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -93,6 +94,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           { id: "commitments", label: "Commitments" },
           { id: "milestones", label: "Milestones", count: milestones.length },
           { id: "issues", label: "Issues", count: c.open },
+          { id: "capacity", label: "Capacity" },
           { id: "history", label: "History" },
         ]} />
 
@@ -109,6 +111,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         {tab === "commitments" && <Commitments project={p} milestones={milestones} onChange={() => { reload(); ms.reload(); }} />}
         {tab === "milestones" && <MilestonesCard projectId={p.id} milestones={milestones} error={ms.error} onChange={() => { reload(); ms.reload(); }} />}
         {tab === "issues" && <IssuesCard projectId={p.id} milestones={milestones} onChange={() => { reload(); ms.reload(); }} />}
+        {tab === "capacity" && <ProjectCapacity projectId={p.id} projectIds={p.delivery?.covers_project_ids ?? [p.id]} onChange={reload} />}
         {tab === "history" && <RiskHistory projectId={p.id} />}
       </div>
     </>
@@ -150,6 +153,7 @@ function RolesCard({ project, onSaved }: { project: ProjectSummary; onSaved: () 
   const [owner, setOwner] = useState(project.owner ?? "");
   const [lead, setLead] = useState(project.tech_lead ?? "");
   const [err, setErr] = useState<Error | null>(null);
+  const people = useApi<{ people: Person[] }>(editing ? "/people" : null);
 
   async function save() {
     try {
@@ -165,8 +169,9 @@ function RolesCard({ project, onSaved }: { project: ProjectSummary; onSaved: () 
     <div className="flex flex-wrap items-center gap-3">
       {editing ? (
         <>
-          <label className="flex items-center gap-1.5">Owner <input className="field" value={owner} onChange={(e) => setOwner(e.target.value)} /></label>
-          <label className="flex items-center gap-1.5">Tech lead <input className="field" value={lead} onChange={(e) => setLead(e.target.value)} /></label>
+          <datalist id="role-people">{(people.data?.people ?? []).map((x) => <option key={x.id} value={x.name} />)}</datalist>
+          <label className="flex items-center gap-1.5">Owner <input className="field" list="role-people" placeholder="Pick or type a name" value={owner} onChange={(e) => setOwner(e.target.value)} /></label>
+          <label className="flex items-center gap-1.5">Tech lead <input className="field" list="role-people" placeholder="Pick or type a name" value={lead} onChange={(e) => setLead(e.target.value)} /></label>
           <button onClick={save} className="btn btn-primary btn-sm">Save as verified</button>
           <button onClick={() => setEditing(false)} className="btn btn-sm">Cancel</button>
           <ErrorBox error={err} />

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/arshadm25/cto-delivery-planner/internal/planning"
+	"github.com/arshadm25/cto-delivery-planner/internal/risks"
 	"github.com/arshadm25/cto-delivery-planner/internal/store"
 )
 
@@ -49,8 +50,27 @@ func (s *Server) handlePlanIssues(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	c, err := s.planChange(r, a, ps, issues, in.Changes)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !c.Estimated.Set && !c.DueDate.Set && !c.Assignee.Set && !c.VersionID.Set {
+		writeError(w, http.StatusBadRequest, "nothing to change")
+		return
+	}
+	if err := s.store.SetIssuePlans(r.Context(), in.IssueIDs, c, current(r).user.ID, actorOf(r)); err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// planChange reads the "changes" object of a plan request. Each key that is
+// present is applied; null goes back to the Redmine value.
+func (s *Server) planChange(r *http.Request, a *analysis, ps *ProjectSummary, issues []risks.Issue, changes map[string]json.RawMessage) (store.PlanChange, error) {
 	var c store.PlanChange
-	for k, raw := range in.Changes {
+	for k, raw := range changes {
 		null := strings.TrimSpace(string(raw)) == "null"
 		var err error
 		switch k {
@@ -82,8 +102,7 @@ func (s *Server) handlePlanIssues(w http.ResponseWriter, r *http.Request) {
 				if err = json.Unmarshal(raw, &v); err == nil {
 					var known bool
 					if qerr := s.store.Pool.QueryRow(r.Context(), `SELECT EXISTS (SELECT 1 FROM redmine_users WHERE redmine_id = $1)`, v).Scan(&known); qerr != nil {
-						s.internal(w, r, qerr)
-						return
+						return c, qerr
 					}
 					if !known {
 						err = errors.New("unknown assignee")
@@ -110,19 +129,10 @@ func (s *Server) handlePlanIssues(w http.ResponseWriter, r *http.Request) {
 			err = errors.New("unknown field " + k)
 		}
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
+			return c, err
 		}
 	}
-	if !c.Estimated.Set && !c.DueDate.Set && !c.Assignee.Set && !c.VersionID.Set {
-		writeError(w, http.StatusBadRequest, "nothing to change")
-		return
-	}
-	if err := s.store.SetIssuePlans(r.Context(), in.IssueIDs, c, current(r).user.ID, actorOf(r)); err != nil {
-		s.internal(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+	return c, nil
 }
 
 type milestoneBody struct {
@@ -264,4 +274,101 @@ func (s *Server) handleDeleteTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleCreateTask adds a planner task for work that is not in Redmine.
+// "changes" takes the same fields as a plan request.
+func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
+	a, ps, ok := s.projectFor(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Subject string                     `json:"subject"`
+		Changes map[string]json.RawMessage `json:"changes"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	in.Subject = strings.TrimSpace(in.Subject)
+	if in.Subject == "" || len(in.Subject) > 255 {
+		writeError(w, http.StatusBadRequest, "a task needs a subject of up to 255 characters")
+		return
+	}
+	c, err := s.planChange(r, a, ps, a.d.ProjectIssues(ps.ID), in.Changes)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	me := current(r).user
+	id, err := s.store.CreateTask(r.Context(), ps.ID, in.Subject, me.ID, actorOf(r))
+	if err == nil && (c.Estimated.Set || c.DueDate.Set || c.Assignee.Set || c.VersionID.Set) {
+		err = s.store.SetIssuePlans(r.Context(), []int{id}, c, me.ID, actorOf(r))
+	}
+	if err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"id": id})
+}
+
+// handleUpdateTask renames a planner task or marks it done or open. {tid}
+// is the planner ID, which is minus the issue ID.
+func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
+	_, ps, ok := s.projectFor(w, r)
+	if !ok {
+		return
+	}
+	tid, ok := pathInt(r, "tid")
+	if !ok {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	var in struct {
+		Subject *string `json:"subject"`
+		Done    *bool   `json:"done"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if in.Subject != nil {
+		t := strings.TrimSpace(*in.Subject)
+		if t == "" || len(t) > 255 {
+			writeError(w, http.StatusBadRequest, "a task needs a subject of up to 255 characters")
+			return
+		}
+		in.Subject = &t
+	}
+	err := s.store.UpdateTask(r.Context(), ps.ID, int64(tid), in.Subject, in.Done, actorOf(r))
+	switch {
+	case errors.Is(err, store.ErrPlanNotFound):
+		writeError(w, http.StatusNotFound, "task not found")
+	case err != nil:
+		s.internal(w, r, err)
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (s *Server) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
+	_, ps, ok := s.projectFor(w, r)
+	if !ok {
+		return
+	}
+	tid, ok := pathInt(r, "tid")
+	if !ok {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	err := s.store.DeleteTask(r.Context(), ps.ID, int64(tid), actorOf(r))
+	switch {
+	case errors.Is(err, store.ErrPlanNotFound):
+		writeError(w, http.StatusNotFound, "task not found")
+	case err != nil:
+		s.internal(w, r, err)
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
 }

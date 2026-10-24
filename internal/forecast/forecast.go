@@ -97,12 +97,22 @@ type Input struct {
 	Baseline              *time.Time
 	Actual                *time.Time
 	Calendar              Calendar
+	// AheadHours and AheadOpen are the remaining effort and open issues of
+	// milestones delivered before this one by the same people. They are
+	// done first, so this scope's forecast starts after them.
+	AheadHours float64
+	AheadOpen  int
+	// QADays is the working days of testing after development is done, from
+	// the rule settings. With it the forecast is a release date.
+	QADays int
 }
 
 // Result is an explained forecast.
 type Result struct {
-	Baseline    *time.Time     `json:"baseline"`
-	Forecast    *time.Time     `json:"forecast"`
+	Baseline *time.Time `json:"baseline"`
+	Forecast *time.Time `json:"forecast"`
+	// DevDone is when development is forecast to finish, before QA days.
+	DevDone     *time.Time     `json:"dev_done"`
 	Actual      *time.Time     `json:"actual"`
 	Method      string         `json:"method"`
 	Confidence  string         `json:"confidence"`
@@ -116,6 +126,7 @@ type Result struct {
 const (
 	MethodEffort     = "remaining_effort_over_capacity"
 	MethodThroughput = "recent_throughput"
+	MethodQAOnly     = "qa_days_only"
 	MethodNone       = "tbd"
 
 	StatusOnTrack   = "on_track"
@@ -192,6 +203,8 @@ func Compute(in Input) Result {
 		res.Confidence = "high"
 		res.Forecast = in.Actual
 		return res
+	case open == 0 && awaitingQA > 0 && in.QADays > 0:
+		// Development is finished; only testing is left.
 	case open == 0:
 		res.Method = MethodNone
 		res.Confidence = "none"
@@ -206,9 +219,20 @@ func Compute(in Input) Result {
 
 	var fc *time.Time
 	switch {
+	case open == 0:
+		res.Method = MethodQAOnly
+		res.Confidence = "low"
+		t := in.Today
+		fc = &t
 	case coverage >= minCoverageEffort && in.WeeklyCapacity > 0:
 		res.Method = MethodEffort
 		scaled := remaining / coverage
+		if in.AheadHours > 0 {
+			res.Inputs["earlier_milestones_hours"] = round(in.AheadHours, 1)
+			res.Assumptions = append(res.Assumptions, fmt.Sprintf(
+				"About %.0f h of earlier milestones is done first; milestones are delivered one after another in baseline order", in.AheadHours))
+			scaled += in.AheadHours
+		}
 		if coverage < 1 {
 			res.Assumptions = append(res.Assumptions,
 				fmt.Sprintf("%d unestimated issue(s) assumed to be the same size on average as estimated ones", open-estimated))
@@ -228,7 +252,12 @@ func Compute(in Input) Result {
 		}
 	case closed >= minClosedForTrend && weeksWithCloses >= minWeeksWithCloses:
 		res.Method = MethodThroughput
-		weeks := float64(open) / perWeek
+		if in.AheadOpen > 0 {
+			res.Inputs["earlier_milestones_open"] = in.AheadOpen
+			res.Assumptions = append(res.Assumptions, fmt.Sprintf(
+				"%d open issue(s) of earlier milestones close first; milestones are delivered one after another in baseline order", in.AheadOpen))
+		}
+		weeks := float64(open+in.AheadOpen) / perWeek
 		days := int(math.Ceil(weeks * float64(len(cal.WorkingDays))))
 		res.Inputs["working_days_needed"] = days
 		res.Assumptions = append(res.Assumptions, "Open issues close at the average rate of the last 8 weeks",
@@ -259,6 +288,14 @@ func Compute(in Input) Result {
 		fc = &t
 		res.Assumptions = append(res.Assumptions, "Forecast moved to the due date of an external blocking issue")
 	}
+	if in.QADays > 0 {
+		dev := *fc
+		res.DevDone = &dev
+		t := cal.AddWorkingDays(dev, in.QADays)
+		fc = &t
+		res.Inputs["qa_days"] = in.QADays
+		res.Assumptions = append(res.Assumptions, fmt.Sprintf("%d working day(s) of QA after development, so the forecast is a release date", in.QADays))
+	}
 	res.Forecast = fc
 
 	res.Status = StatusTBD
@@ -273,7 +310,7 @@ func Compute(in Input) Result {
 				Action:   "Decide with the project manager: reduce scope, add capacity, or approve a revised baseline with a reason."})
 		}
 		if in.CapacityUntilBaseline >= 0 && estimated > 0 {
-			need := remaining / math.Max(coverage, 0.01)
+			need := remaining/math.Max(coverage, 0.01) + in.AheadHours
 			res.Inputs["capacity_until_baseline_hours"] = round(in.CapacityUntilBaseline, 1)
 			if need > in.CapacityUntilBaseline {
 				res.Flags = append(res.Flags, risks.Flag{Kind: risks.KindCapacity, Severity: risks.High,

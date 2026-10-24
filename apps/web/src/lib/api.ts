@@ -86,6 +86,22 @@ export interface DeliveryDates {
   assumptions: string[];
   inputs: Record<string, string | number | null>;
   status: "on_track" | "at_risk" | "late" | "tbd" | "delivered";
+  /** When development finishes; forecast adds the QA days from settings. */
+  dev_done?: string | null;
+  /** A parent's forecast covers itself and these subprojects. */
+  covers_project_ids?: number[];
+  /** Work in scope now compared with the scope frozen when the baseline was approved. */
+  scope?: ScopeChange;
+}
+
+export interface ScopeChange {
+  baseline_issues: number;
+  baseline_hours: number;
+  current_issues: number;
+  current_hours: number;
+  added: number[];
+  removed: number[];
+  estimate_change_hours: number;
 }
 
 export interface ProjectSummary {
@@ -184,6 +200,8 @@ export interface Issue {
   flags: string[];
   redmine_url?: string;
   awaiting_qa: boolean;
+  // A task created in the planner (negative ID); not in Redmine.
+  planner_task?: boolean;
   // Fields whose value was set in the planner, and Redmine's value for each.
   planned?: PlanField[];
   redmine_values?: Partial<Record<PlanField, string | number | null>>;
@@ -196,6 +214,19 @@ export type PlanField = "estimated_hours" | "due_date" | "assignee_id" | "versio
 // the Redmine value.
 export function planIssues(projectId: number, issueIds: number[], changes: Partial<Record<PlanField, string | number | null>>) {
   return api<void>(`/projects/${projectId}/plan`, { method: "POST", body: { issue_ids: issueIds, changes } });
+}
+
+// Planner tasks are addressed by their planner ID, which is minus the issue ID.
+export function createTask(projectId: number, subject: string, changes: Partial<Record<PlanField, string | number | null>>) {
+  return api<{ id: number }>(`/projects/${projectId}/tasks`, { method: "POST", body: { subject, changes } });
+}
+
+export function updateTask(projectId: number, issueId: number, body: { subject?: string; done?: boolean }) {
+  return api<void>(`/projects/${projectId}/tasks/${-issueId}`, { method: "PATCH", body });
+}
+
+export function deleteTask(projectId: number, issueId: number) {
+  return api<void>(`/projects/${projectId}/tasks/${-issueId}`, { method: "DELETE" });
 }
 
 export interface MilestoneInput {
