@@ -32,14 +32,14 @@ export default function WeeklyReportPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-xl font-semibold">Weekly delivery report · {data.report_date}</h1>
-        <a className="rounded border px-3 py-1 text-sm hover:bg-slate-100" href={`${API_BASE}/reports/weekly?format=md`}>Download Markdown (names masked)</a>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Weekly delivery report · {date(data.report_date)}</h1>
+        <a className="btn" href={`${API_BASE}/reports/weekly?format=md`}>Download Markdown (names masked)</a>
       </div>
       {data.compared_with && <p className="text-sm text-slate-600">Compared with the snapshot of {data.compared_with}.</p>}
       <List items={data.notes} empty="" />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="What changed">
-          <List items={data.changes.map((c) => <><Link className="font-medium hover:underline" href={`/projects/${c.project_id}`}>{c.project_name}</Link>: {c.health_before ?? "new"} → {c.health_now}{c.causes.length > 0 && <span className="text-slate-600"> ({c.causes.join("; ")})</span>}</>)} />
+          <List items={data.changes.map((c) => <><Link className="link" href={`/projects/${c.project_id}`}>{c.project_name}</Link>: {c.health_before ?? "new"} → {c.health_now}{c.causes.length > 0 && <span className="text-slate-600"> ({c.causes.join("; ")})</span>}</>)} />
         </Card>
         <Card title="Forecast changes and causes">
           <List items={data.forecast_changes.map((c) => <><b>{c.project_name}</b>: {date(c.forecast_before)} → {date(c.forecast_now)} (baseline {date(c.baseline)}). <span className="text-slate-600">{c.causes.join("; ")}</span></>)} />

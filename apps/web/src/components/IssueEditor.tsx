@@ -62,21 +62,21 @@ export function IssuesCard({ projectId, milestones, onChange }: { projectId: num
   return (
     <Card title="Issues">
       <div className="mb-3 flex flex-wrap gap-2 text-sm">
-        <select aria-label="Status" value={status} onChange={(e) => { setStatus(e.target.value); resetPage(); }} className="rounded border px-2 py-1">
+        <select aria-label="Status" value={status} onChange={(e) => { setStatus(e.target.value); resetPage(); }} className="field">
           <option value="open">Open</option><option value="awaiting_qa">Awaiting QA</option><option value="closed">Closed</option><option value="all">All</option>
         </select>
-        <select aria-label="Flag" value={flag} onChange={(e) => { setFlag(e.target.value); resetPage(); }} className="rounded border px-2 py-1">
+        <select aria-label="Flag" value={flag} onChange={(e) => { setFlag(e.target.value); resetPage(); }} className="field">
           <option value="">Any flag</option>
           {FLAG_FILTERS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <select aria-label="Milestone filter" value={version} onChange={(e) => { setVersion(e.target.value); resetPage(); }} className="rounded border px-2 py-1">
+        <select aria-label="Milestone filter" value={version} onChange={(e) => { setVersion(e.target.value); resetPage(); }} className="field">
           <option value="">Any milestone</option>
           {milestones.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
-        <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} className="rounded border px-2 py-1">
+        <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} className="field">
           <option value="id">By ID</option><option value="due">By due date</option><option value="updated">Recently updated</option>
         </select>
-        <input aria-label="Search" placeholder="Search subject or #ID" value={q} onChange={(e) => { setQ(e.target.value); resetPage(); }} className="rounded border px-2 py-1" />
+        <input aria-label="Search" placeholder="Search subject or #ID" value={q} onChange={(e) => { setQ(e.target.value); resetPage(); }} className="field" />
       </div>
       {editable && selected.size > 0 && (
         <BulkBar count={selected.size} milestones={milestones} people={people.data?.people ?? []}
@@ -94,9 +94,9 @@ export function IssuesCard({ projectId, milestones, onChange }: { projectId: num
           <EditRow key={is.id} issue={is} milestones={milestones} people={people.data?.people ?? []}
             onSave={(c) => apply([is.id], c)} onCancel={() => setEditing(null)} />
         ) : (
-          <tr key={is.id} className={selected.has(is.id) ? "bg-sky-50" : undefined}>
+          <tr key={is.id} className={selected.has(is.id) ? "bg-blue-50" : undefined}>
             {editable && <td className="px-2 py-2"><input type="checkbox" aria-label={`Select issue ${is.id}`} checked={selected.has(is.id)} onChange={() => toggle(is.id)} /></td>}
-            <td className="px-2 py-2">{is.redmine_url ? <a className="text-sky-700 hover:underline" href={is.redmine_url} target="_blank" rel="noreferrer">{is.id}</a> : is.id}</td>
+            <td className="px-2 py-2">{is.redmine_url ? <a className="link" href={is.redmine_url} target="_blank" rel="noreferrer">{is.id}</a> : is.id}</td>
             <td className="px-2 py-2">{is.subject}</td>
             <td className="px-2 py-2">{is.status}</td>
             <td className="px-2 py-2"><Planned issue={is} field="assignee_id">{is.assignee_name ?? "TBD"}</Planned></td>
@@ -105,7 +105,7 @@ export function IssuesCard({ projectId, milestones, onChange }: { projectId: num
             <td className="px-2 py-2"><Planned issue={is} field="estimated_hours">{hours(is.estimated_hours)}</Planned></td>
             <td className="px-2 py-2">{hours(is.spent_hours)}</td>
             <td className="px-2 py-2 space-x-1">{is.flags.map((f) => <FlagChip key={f} kind={f} />)}</td>
-            {editable && <td className="px-2 py-2"><button className="rounded border px-2 py-0.5" onClick={() => setEditing(is.id)}>Edit</button></td>}
+            {editable && <td className="px-2 py-2"><button className="btn btn-sm" onClick={() => setEditing(is.id)}>Edit</button></td>}
           </tr>
         ))}
       </Table>
@@ -156,7 +156,7 @@ function EditRow({ issue, milestones, people, onSave, onCancel }: {
   }
   const revert = (field: PlanField) => onSave({ [field]: null });
   const RevertBtn = ({ field }: { field: PlanField }) =>
-    planned.has(field) ? <button type="button" title="Go back to the Redmine value" className="ml-1 text-xs text-sky-700 hover:underline" onClick={() => revert(field)}>use Redmine</button> : null;
+    planned.has(field) ? <button type="button" title="Go back to the Redmine value" className="link ml-1 text-xs" onClick={() => revert(field)}>use Redmine</button> : null;
 
   return (
     <tr className="bg-amber-50">
@@ -165,30 +165,30 @@ function EditRow({ issue, milestones, people, onSave, onCancel }: {
       <td className="px-2 py-2">{issue.subject}</td>
       <td className="px-2 py-2">{issue.status}</td>
       <td className="px-2 py-2">
-        <select aria-label="Assignee" value={f.assignee_id} onChange={(e) => setF({ ...f, assignee_id: e.target.value })} className="max-w-40 rounded border px-1 py-0.5">
+        <select aria-label="Assignee" value={f.assignee_id} onChange={(e) => setF({ ...f, assignee_id: e.target.value })} className="field max-w-40">
           <option value="">Unassigned</option>
           {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select><RevertBtn field="assignee_id" />
       </td>
       <td className="px-2 py-2">
-        <select aria-label="Milestone" value={f.version_id} onChange={(e) => setF({ ...f, version_id: e.target.value })} className="max-w-40 rounded border px-1 py-0.5">
+        <select aria-label="Milestone" value={f.version_id} onChange={(e) => setF({ ...f, version_id: e.target.value })} className="field max-w-40">
           <option value="">None</option>
           {milestones.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select><RevertBtn field="version_id" />
       </td>
       <td className="px-2 py-2">
-        <input type="date" aria-label="Due date" value={f.due_date} onChange={(e) => setF({ ...f, due_date: e.target.value })} className="rounded border px-1 py-0.5" />
+        <input type="date" aria-label="Due date" value={f.due_date} onChange={(e) => setF({ ...f, due_date: e.target.value })} className="field px-2 py-1" />
         <RevertBtn field="due_date" />
       </td>
       <td className="px-2 py-2">
-        <input type="number" min={0} step="0.5" aria-label="Estimate hours" value={f.estimated_hours} onChange={(e) => setF({ ...f, estimated_hours: e.target.value })} className="w-20 rounded border px-1 py-0.5" />
+        <input type="number" min={0} step="0.5" aria-label="Estimate hours" value={f.estimated_hours} onChange={(e) => setF({ ...f, estimated_hours: e.target.value })} className="field w-20" />
         <RevertBtn field="estimated_hours" />
       </td>
       <td className="px-2 py-2">{hours(issue.spent_hours)}</td>
       <td className="px-2 py-2" />
       <td className="px-2 py-2 space-x-1 whitespace-nowrap">
-        <button className="rounded bg-slate-900 px-2 py-0.5 text-white" onClick={save}>Save</button>
-        <button className="rounded border px-2 py-0.5" onClick={onCancel}>Cancel</button>
+        <button className="btn btn-primary btn-sm" onClick={save}>Save</button>
+        <button className="btn btn-sm" onClick={onCancel}>Cancel</button>
       </td>
     </tr>
   );
@@ -209,10 +209,10 @@ function BulkBar({ count, milestones, people, onApply, onClear }: {
     setValue("");
   }
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2 rounded border border-sky-200 bg-sky-50 p-2 text-sm">
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-2 text-sm">
       <span className="font-medium">{count} selected</span>
       <span>Set</span>
-      <select aria-label="Field to set" value={field} onChange={(e) => { setField(e.target.value as PlanField); setValue(""); }} className="rounded border px-2 py-1">
+      <select aria-label="Field to set" value={field} onChange={(e) => { setField(e.target.value as PlanField); setValue(""); }} className="field">
         <option value="version_id">Milestone</option>
         <option value="assignee_id">Assignee</option>
         <option value="due_date">Due date</option>
@@ -220,21 +220,21 @@ function BulkBar({ count, milestones, people, onApply, onClear }: {
       </select>
       <span>to</span>
       {field === "version_id" && (
-        <select aria-label="Bulk milestone" value={value} onChange={(e) => setValue(e.target.value)} className="rounded border px-2 py-1">
+        <select aria-label="Bulk milestone" value={value} onChange={(e) => setValue(e.target.value)} className="field">
           <option value="">Redmine value</option>
           {milestones.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
       )}
       {field === "assignee_id" && (
-        <select aria-label="Bulk assignee" value={value} onChange={(e) => setValue(e.target.value)} className="rounded border px-2 py-1">
+        <select aria-label="Bulk assignee" value={value} onChange={(e) => setValue(e.target.value)} className="field">
           <option value="">Redmine value</option>
           {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       )}
-      {field === "due_date" && <input type="date" aria-label="Bulk due date" value={value} onChange={(e) => setValue(e.target.value)} className="rounded border px-2 py-1" />}
-      {field === "estimated_hours" && <input type="number" min={0} step="0.5" aria-label="Bulk estimate" placeholder="hours" value={value} onChange={(e) => setValue(e.target.value)} className="w-24 rounded border px-2 py-1" />}
-      <button className="rounded bg-slate-900 px-3 py-1 text-white" onClick={apply}>Apply to {count}</button>
-      <button className="rounded border px-2 py-1" onClick={onClear}>Clear selection</button>
+      {field === "due_date" && <input type="date" aria-label="Bulk due date" value={value} onChange={(e) => setValue(e.target.value)} className="field" />}
+      {field === "estimated_hours" && <input type="number" min={0} step="0.5" aria-label="Bulk estimate" placeholder="hours" value={value} onChange={(e) => setValue(e.target.value)} className="field w-24" />}
+      <button className="btn btn-primary" onClick={apply}>Apply to {count}</button>
+      <button className="field" onClick={onClear}>Clear selection</button>
       <span className="text-xs text-slate-500">Leaving the value empty goes back to Redmine’s value.</span>
     </div>
   );

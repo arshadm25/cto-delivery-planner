@@ -52,8 +52,8 @@ export function TeamsCard({ teams, people, onChange }: { teams: Team[]; people: 
             <td className="px-2 py-2">{teamWeeklyHours(t) === null ? "Not set" : hours(teamWeeklyHours(t))}</td>
             {editable && (
               <td className="px-2 py-2 space-x-1 whitespace-nowrap">
-                <button className="rounded border px-2 py-0.5" onClick={() => setEditing(t.id)}>Edit</button>
-                <button className="rounded border px-2 py-0.5" onClick={() => {
+                <button className="btn btn-sm" onClick={() => setEditing(t.id)}>Edit</button>
+                <button className="btn btn-sm" onClick={() => {
                   if (confirm(`Delete team “${t.name}”?`)) act(() => api(`/teams/${t.id}`, { method: "DELETE" }));
                 }}>Delete</button>
               </td>
@@ -67,7 +67,7 @@ export function TeamsCard({ teams, people, onChange }: { teams: Team[]; people: 
           <TeamForm people={people} onCancel={() => setEditing(null)} onSubmit={(b) => act(() => api("/teams", { method: "POST", body: b }))} />
         </div>
       ) : (
-        <button className="mt-3 rounded border border-slate-900 px-3 py-1 text-sm" onClick={() => setEditing("new")}>New team</button>
+        <button className="btn mt-3" onClick={() => setEditing("new")}>New team</button>
       ))}
     </Card>
   );
@@ -94,14 +94,14 @@ function TeamForm({ initial, people, onSubmit, onCancel }: {
   }
   return (
     <form onSubmit={submit} className="space-y-2 text-sm">
-      <input required aria-label="Team name" placeholder="Team name" value={name} onChange={(e) => setName(e.target.value)} className="rounded border px-2 py-1" />
+      <input required aria-label="Team name" placeholder="Team name" value={name} onChange={(e) => setName(e.target.value)} className="field" />
       <div className="flex flex-wrap items-center gap-2">
-        <input aria-label="Find member" placeholder="Find a Redmine member" value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded border px-2 py-1" />
-        <select aria-label="Member to add" value={pick} onChange={(e) => setPick(e.target.value)} className="rounded border px-2 py-1">
+        <input aria-label="Find member" placeholder="Find a Redmine member" value={filter} onChange={(e) => setFilter(e.target.value)} className="field" />
+        <select aria-label="Member to add" value={pick} onChange={(e) => setPick(e.target.value)} className="field">
           <option value="">Choose…</option>
           {choices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <button type="button" disabled={!pick} className="rounded border px-2 py-1 disabled:opacity-40" onClick={() => {
+        <button type="button" disabled={!pick} className="btn" onClick={() => {
           setMembers([...members, { person_id: Number(pick), hours: "" }]);
           setPick("");
         }}>Add member</button>
@@ -112,15 +112,15 @@ function TeamForm({ initial, people, onSubmit, onCancel }: {
             <li key={m.person_id} className="flex items-center gap-2">
               <span className="w-48 truncate">{nameOf(m.person_id)}</span>
               <input type="number" min={0} max={168} step="0.5" aria-label={`Hours per week for ${nameOf(m.person_id)}`} placeholder="h/week"
-                value={m.hours} onChange={(e) => setMembers(members.map((x, j) => j === i ? { ...x, hours: e.target.value } : x))} className="w-24 rounded border px-2 py-0.5" />
-              <button type="button" className="text-xs text-sky-700 hover:underline" onClick={() => setMembers(members.filter((_, j) => j !== i))}>Remove</button>
+                value={m.hours} onChange={(e) => setMembers(members.map((x, j) => j === i ? { ...x, hours: e.target.value } : x))} className="field w-24" />
+              <button type="button" className="link text-xs" onClick={() => setMembers(members.filter((_, j) => j !== i))}>Remove</button>
             </li>
           ))}
         </ul>
       )}
       <div className="space-x-2">
-        <button className="rounded bg-slate-900 px-3 py-1 text-white">Save team</button>
-        <button type="button" className="rounded border px-2 py-1" onClick={onCancel}>Cancel</button>
+        <button className="btn btn-primary">Save team</button>
+        <button type="button" className="field" onClick={onCancel}>Cancel</button>
       </div>
     </form>
   );
