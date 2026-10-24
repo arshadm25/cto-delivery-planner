@@ -257,6 +257,95 @@ func (s *Server) visibleSummaries(r *http.Request, a *analysis) []*ProjectSummar
 	return out
 }
 
+// ProjectView is a project summary with its subprojects as the viewer sees
+// them. It is built per request because access differs between users.
+type ProjectView struct {
+	*ProjectSummary
+	// SubprojectIDs are the direct children the viewer may see.
+	SubprojectIDs []int `json:"subproject_ids"`
+	// Rollup sums Issues over the project and every visible descendant, as
+	// Redmine's project overview does. It is null without visible subprojects.
+	Rollup *IssueCounts `json:"rollup"`
+	// RollupRemainingEstimatedHours and RollupEstimateCoverage are
+	// RemainingEstimatedHours and EstimateCoverage over the same projects as
+	// Rollup. Both are null when Rollup is null or the value is unknown.
+	RollupRemainingEstimatedHours *float64 `json:"rollup_remaining_estimated_hours"`
+	RollupEstimateCoverage        *float64 `json:"rollup_estimate_coverage"`
+}
+
+// withSubprojects wraps summaries with their subproject IDs and rollups,
+// counting only projects the viewer may see.
+func (s *Server) withSubprojects(r *http.Request, a *analysis, ps []*ProjectSummary) []ProjectView {
+	acc := current(r).access
+	children := map[int][]int{}
+	for _, p := range a.d.Projects {
+		if p.ParentID != nil {
+			children[*p.ParentID] = append(children[*p.ParentID], p.ID)
+		}
+	}
+	out := make([]ProjectView, len(ps))
+	for i, p := range ps {
+		v := ProjectView{ProjectSummary: p, SubprojectIDs: []int{}}
+		sum := p.Issues
+		var hours float64
+		anyHours := p.RemainingEstimatedHours != nil
+		if anyHours {
+			hours = *p.RemainingEstimatedHours
+		}
+		// Walk the whole subtree so a hidden middle project does not hide
+		// the visible ones below it; only visible projects are counted.
+		stack := append([]int(nil), children[p.ID]...)
+		seen := map[int]bool{p.ID: true}
+		for len(stack) > 0 {
+			id := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			stack = append(stack, children[id]...)
+			c := a.projects[id]
+			if c == nil || !acc.Allows(id) {
+				continue
+			}
+			if c.ParentID != nil && *c.ParentID == p.ID {
+				v.SubprojectIDs = append(v.SubprojectIDs, id)
+			}
+			addCounts(&sum, c.Issues)
+			if c.RemainingEstimatedHours != nil {
+				hours += *c.RemainingEstimatedHours
+				anyHours = true
+			}
+			v.Rollup = &sum
+		}
+		if v.Rollup != nil {
+			if anyHours {
+				v.RollupRemainingEstimatedHours = &hours
+			}
+			// OpenNoEstimate leaves out issues awaiting QA, as EstimateCoverage does.
+			if dev := sum.Open - sum.AwaitingQA; dev > 0 {
+				c := float64(dev-sum.OpenNoEstimate) / float64(dev)
+				v.RollupEstimateCoverage = &c
+			}
+		}
+		sort.Ints(v.SubprojectIDs)
+		out[i] = v
+	}
+	return out
+}
+
+func addCounts(dst *IssueCounts, c IssueCounts) {
+	dst.Total += c.Total
+	dst.Open += c.Open
+	dst.AwaitingQA += c.AwaitingQA
+	dst.Closed += c.Closed
+	dst.Overdue += c.Overdue
+	dst.Blocked += c.Blocked
+	dst.OpenUnassigned += c.OpenUnassigned
+	dst.OpenNoEstimate += c.OpenNoEstimate
+	dst.OpenNoDate += c.OpenNoDate
+}
+
 // PortfolioSummary is the CTO overview.
 type PortfolioSummary struct {
 	ProjectsInScope    int               `json:"projects_in_scope"`
@@ -268,7 +357,7 @@ type PortfolioSummary struct {
 	UpcomingMilestones []MilestoneRef    `json:"upcoming_milestones"`
 	LastSuccessfulSync *time.Time        `json:"last_successful_sync"`
 	DataStale          bool              `json:"data_stale"`
-	Projects           []*ProjectSummary `json:"projects"`
+	Projects           []ProjectView     `json:"projects"`
 	WorkloadConcerns   []WorkloadConcern `json:"workload_concerns"`
 	Today              string            `json:"today"`
 }
@@ -280,7 +369,7 @@ func (s *Server) handlePortfolio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ps := s.visibleSummaries(r, a)
-	out := PortfolioSummary{ProjectsInScope: len(ps), ByHealth: map[string]int{}, Projects: ps, UpcomingMilestones: []MilestoneRef{},
+	out := PortfolioSummary{ProjectsInScope: len(ps), ByHealth: map[string]int{}, Projects: s.withSubprojects(r, a, ps), UpcomingMilestones: []MilestoneRef{},
 		Today: a.rules.Today.Format(time.DateOnly)}
 	for _, st := range []risks.State{risks.OnTrack, risks.AtRisk, risks.Blocked, risks.InsufficientData} {
 		out.ByHealth[string(st)] = 0
@@ -342,10 +431,7 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 		}
 		ps = keep
 	}
-	if ps == nil {
-		ps = []*ProjectSummary{}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"projects": ps})
+	writeJSON(w, http.StatusOK, map[string]any{"projects": s.withSubprojects(r, a, ps)})
 }
 
 // projectFor resolves {id} and enforces access. Projects the user may not
@@ -385,7 +471,7 @@ func (s *Server) handleProject(w http.ResponseWriter, r *http.Request) {
 		top = top[:50]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"project":   ps,
+		"project":   s.withSubprojects(r, a, []*ProjectSummary{ps})[0],
 		"blockers":  top,
 		"data_gaps": dataGaps(ps),
 		"rules":     a.rules,

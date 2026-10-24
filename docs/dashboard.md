@@ -58,6 +58,10 @@ All under `/api/v1`, JSON, cookie session. The Next.js app forwards `/api/v1/*` 
 | GET, PUT | `/settings/rules` | Thresholds |
 | GET, POST, PATCH, PUT | `/admin/users…` | Accounts and project access |
 
+### Subprojects
+
+Each Redmine project is stored and counted on its own; `issues` never includes subprojects. Every project object from `/portfolio/summary`, `/projects` and `/projects/{id}` also carries `parent_id`, `subproject_ids` (direct children the viewer may see) and `rollup`: the same counts as `issues`, summed over the project and all visible descendants, with `rollup_remaining_estimated_hours` and `rollup_estimate_coverage` over the same projects. That matches the totals on Redmine's project overview page, which include subprojects. `rollup` is null for a project without visible subprojects, and it is computed per user, so it never counts a project the viewer cannot see.
+
 ## Flags and health
 
 Rules live in `internal/risks` and are unit-tested. Every flag has evidence, a suggested action and a link to the Redmine issue or version.
