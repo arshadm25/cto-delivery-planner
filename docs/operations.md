@@ -80,6 +80,14 @@ Monthly restore test, which restores the latest dump into a scratch database, co
 deploy/scripts/restore-check.sh /var/backups/cto-planner/<latest>.dump
 ```
 
+Without Docker (PostgreSQL installed on the host or a managed database), add `PG_DIRECT=1` and the usual libpq variables (`PGHOST`, `PGPORT`, `PGUSER`, and `PGPASSWORD` or `~/.pgpass`) to both commands; `PLANNER_DB` names the database (default `cto_planner`). The restore check needs a user with `CREATEDB`.
+
+Record each restore test here (P5-04 is done after the first one):
+
+| Date | Dump | Result | By |
+|---|---|---|---|
+| | | | |
+
 Real restore after data loss:
 
 ```bash

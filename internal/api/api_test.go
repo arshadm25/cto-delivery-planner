@@ -296,6 +296,26 @@ func TestSyncHealthEndpoint(t *testing.T) {
 	}
 }
 
+func TestSecurityHeaders(t *testing.T) {
+	e := newEnv(t)
+	resp, err := http.Get(e.srv.URL + "/api/v1/auth/me")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	want := map[string]string{
+		"Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+		"X-Frame-Options":         "DENY",
+		"X-Content-Type-Options":  "nosniff",
+		"Cache-Control":           "no-store",
+	}
+	for k, v := range want {
+		if got := resp.Header.Get(k); got != v {
+			t.Errorf("%s = %q, want %q", k, got, v)
+		}
+	}
+}
+
 func TestAwaitingQABucket(t *testing.T) {
 	e := newEnv(t)
 	cto := e.user("cto@example.test", auth.CTO)

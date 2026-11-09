@@ -16,6 +16,7 @@ Redmine stays the source of truth. The planner only reads from Redmine: it never
 | `internal/redmine` | Read-only Redmine client |
 | `migrations` | PostgreSQL schema |
 | `deploy` | Docker Compose deployment, reverse-proxy examples, backup, restore and alert scripts ([docs/operations.md](docs/operations.md)) |
+| `docs/local-setup.md` | Running locally without Docker (`make local-db`) |
 | `config/scope.json` | In-scope Redmine project IDs ([docs/scope.md](docs/scope.md)) |
 | `cmd/devseed`, `internal/redminetest` | Fictional demo data and the fake Redmine used by tests |
 

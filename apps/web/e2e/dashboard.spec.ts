@@ -10,6 +10,24 @@ async function login(page: Page, email: string) {
   await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
 }
 
+test("pages send a Content-Security-Policy and run without violations", async ({ page }) => {
+  const violations: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error" && /Content Security Policy/i.test(msg.text())) violations.push(msg.text());
+  });
+  const res = await page.goto("/login");
+  const csp = res?.headers()["content-security-policy"] ?? "";
+  expect(csp).toContain("default-src 'self'");
+  expect(csp).toContain("frame-ancestors 'none'");
+  expect(csp).not.toContain("unsafe-eval");
+  await login(page, "cto@example.test");
+  await expect(page.getByRole("heading", { name: "Portfolio overview" })).toBeVisible();
+  await page.getByRole("link", { name: "Alpha Portal" }).click();
+  await expect(page).toHaveURL(/\/projects\//);
+  await page.waitForLoadState("networkidle");
+  expect(violations).toEqual([]);
+});
+
 test("anonymous visitors are sent to login", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/login/);

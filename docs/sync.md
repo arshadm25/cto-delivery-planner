@@ -6,6 +6,7 @@ Backlog items P2-01 to P2-09. The sync worker copies Redmine data into PostgreSQ
 
 ```sh
 make up                 # PostgreSQL 16 in Docker, bound to 127.0.0.1:5432
+                        # no Docker? run PostgreSQL 16 yourself and use `make local-db` (local-setup.md)
 cp .env.example .env    # then fill in REDMINE_URL and REDMINE_API_KEY on the trusted host
 make migrate            # create the tables
 make sync-full          # first full import; prints counts per resource
@@ -44,7 +45,31 @@ Each run is recorded in `sync_runs` with counts per resource (fetched, created, 
 
 ## To confirm on your Redmine (Q2)
 
-The `updated_on=>=<timestamp>` filter and `include=relations` on the issue list are documented Redmine API features, but the installed version is not recorded yet. Run `make sync-full` and then `make sync-incremental` once and check that the second run reports a small number of fetched issues and no reconciliation mismatch.
+The installed version is 5.1.12 ([redmine-environment.md](redmine-environment.md)). The `updated_on=>=<timestamp>` filter and `include=relations` on the issue list are documented Redmine API features, but the tests only exercise them against the fake Redmine. To confirm them on the real server (backlog item P2-08), run a full import, wait a few minutes, then run an incremental one:
+
+```sh
+make sync-full
+make sync-incremental
+```
+
+Then check the two runs:
+
+```sql
+-- The incremental run should fetch far fewer issues than the full run.
+SELECT id, kind, outcome, counts->'issues'->>'fetched' AS issues_fetched,
+       checkpoint_before, checkpoint_after
+FROM sync_runs ORDER BY id DESC LIMIT 2;
+
+-- Should return 0: every in-scope project's stored total matches total_count.
+SELECT count(*) FROM sync_reconciliation
+WHERE run_id = (SELECT max(id) FROM sync_runs) AND NOT matches;
+```
+
+P2-08 is confirmed when the incremental run succeeded, fetched only recently changed issues, moved the checkpoint forward and found no mismatch. Record the date here.
+
+| Check | Result |
+|---|---|
+| Incremental run confirmed on the real Redmine | TBD |
 
 ## Integration tests (Q11)
 
