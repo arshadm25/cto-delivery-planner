@@ -4,5 +4,5 @@
   "rule": "All client and product delivery projects. Project 46 was removed on 2026-10-24. Projects 49 to 53 were added on 2026-11-09. Internal admin projects (DevOps, HR and finance, meetings, project management activities, training, e-HR, live-issue log) are excluded.",
   "include_subprojects": false,
   "project_ids": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 23, 24, 27, 28, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 47, 48, 49, 50, 51, 52, 53],
-  "excluded_project_ids": [18, 19, 22, 25, 26, 29, 31, 45, 46]
+  "excluded_project_ids": [18, 19, 22, 25, 26, 29, 31, 45, 46, 54]
 }

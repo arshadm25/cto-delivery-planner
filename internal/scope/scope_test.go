@@ -10,7 +10,7 @@ func TestRepoScopeFileIsValid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(s.ProjectIDs) != 43 || len(s.ExcludedProjectIDs) != 9 {
+	if len(s.ProjectIDs) != 43 || len(s.ExcludedProjectIDs) != 10 {
 		t.Fatalf("included=%d excluded=%d", len(s.ProjectIDs), len(s.ExcludedProjectIDs))
 	}
 	if !s.Includes(14) || s.Includes(26) || s.Includes(1) {
