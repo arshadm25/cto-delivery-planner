@@ -65,11 +65,11 @@ SELECT count(*) FROM sync_reconciliation
 WHERE run_id = (SELECT max(id) FROM sync_runs) AND NOT matches;
 ```
 
-P2-08 is confirmed when the incremental run succeeded, fetched only recently changed issues, moved the checkpoint forward and found no mismatch. Record the date here.
+P2-08 is confirmed when the incremental run succeeded, fetched only recently changed issues and found no mismatch. The checkpoint is the newest `updated_on` Redmine returned, so `checkpoint_after` equals `checkpoint_before` when nothing changed after it; it must never move backwards. Record the date here.
 
 | Check | Result |
 |---|---|
-| Incremental run confirmed on the real Redmine | TBD |
+| Incremental run confirmed on the real Redmine | Yes, 2026-11-09, by the repo owner: full run fetched 7,875 issues, incremental run fetched 1 (inside the overlap window), both succeeded, checkpoint unchanged, 0 reconciliation mismatches |
 
 ## Integration tests (Q11)
 
