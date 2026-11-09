@@ -7,7 +7,8 @@ Backlog item P1-11. The planner's first release covers the Redmine projects list
 | Decided | 2026-10-21, by the repo owner |
 | Rule | All client and product delivery projects |
 | Excluded | Internal admin projects: DevOps, HR and finance, meetings, project management activities, training, e-HR, and the live-issue log |
-| Changed | 2026-10-24, by the repo owner: project 46 removed (38 issues), so 38 projects are now in scope |
+| Changed | 2026-10-24, by the repo owner: project 46 removed (38 issues), so 38 projects were in scope |
+| Changed | 2026-11-09, by the repo owner: new projects 49 to 53 added (created in Redmine between 26 Oct and 7 Nov; some project 14 issues were moved into one of them), so 43 projects are now in scope |
 | Size at decision time | 39 of 47 visible projects, 9,014 of 9,360 issues (first discovery run, administrator key) |
 
 Only IDs are stored here. Project names are client names and stay out of this public repository; `discovery-out/projects.csv` maps IDs to names on the trusted host.
