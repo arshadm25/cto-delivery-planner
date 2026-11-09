@@ -39,7 +39,10 @@ jobs:
         run: go test -race -count=1 ./...
 
   web:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, which Playwright 1.55 cannot
+    # install browser dependencies for. Move this forward with a Playwright
+    # upgrade that supports the newer image.
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16-alpine
