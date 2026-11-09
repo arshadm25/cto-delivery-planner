@@ -11,6 +11,6 @@ Facts about the Redmine installation, filled in during Phase 1 (backlog item P1-
 | REST API enabled | Yes | Administration › Settings › API (user, 2026-10-23) |
 | Reverse proxy or rate limits in front of Redmine | TBD | Server config |
 | Service account login | Created 2026-10-23; login kept out of this public repo | Administration › Users |
-| Service account is non-admin | TBD: confirm with `make auth-check` (expects `administrator: false`) | |
-| Projects the service account is a member of | TBD | Discovery report |
+| Service account is non-admin | Yes | Phase 1 exit review P1-13, accepted by the repo owner 2026-10-24 (see [scope.md](scope.md)) |
+| Projects the service account is a member of | 44 visible, covering all 38 in-scope projects in [`config/scope.json`](../config/scope.json) | Non-admin discovery run, P1-13, 2026-10-24 |
 | Maximum issues page size the server returns | TBD | `limit` in the discovery responses |

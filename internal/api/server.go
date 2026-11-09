@@ -140,6 +140,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("Referrer-Policy", "same-origin")
 	h.Set("Cache-Control", "no-store")
+	// The API only returns JSON and plain text, so nothing it serves should
+	// ever load or run anything.
+	h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
 	defer func() {
 		if p := recover(); p != nil {
 			s.log.Error("panic", "path", r.URL.Path, "panic", p, "stack", string(debug.Stack()))

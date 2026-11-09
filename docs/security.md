@@ -49,15 +49,34 @@ Reviewer: TBD. Date: TBD. Tick each item after checking it on the deployed host,
 - [ ] Reverse proxy sets HSTS and forwards only to the web port.
 - [ ] Containers run non-root, read-only, all capabilities dropped (`docker inspect`).
 - [ ] Host OS and Docker patched; base images rebuilt on upgrade.
-- [ ] Response headers checked: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`.
-- [ ] Decide on a Content-Security-Policy. None is set yet; add it at the reverse proxy or in `apps/web/next.config.ts`.
+- [ ] Response headers checked: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and `Content-Security-Policy` (set in `apps/web/next.config.ts` for pages, and `default-src 'none'` on every API response).
+- [ ] The reverse proxy does not replace or drop the app's `Content-Security-Policy` header.
 
 ## Dependencies
 
 - [ ] `go list -m -u all` and `npm audit` reviewed; no known high-severity issues left unaddressed.
 
+## Code-side review, 2026-11-09
+
+Done by Claude against `main` without access to the deployed host, so the checkboxes above stay open until someone checks them on the host. Confirmed in the code and tests:
+
+- Read-only Redmine client: every non-GET method is refused (`TestNonGetRequestsAreRefused`).
+- Passwords: bcrypt, minimum 12 characters (`internal/auth`). Sessions: random tokens stored as SHA-256 hashes; cookie HttpOnly, SameSite=Strict, Secure unless `COOKIE_SECURE=false`.
+- Login rate limit (`TestLoginRateLimit`), CSRF header guard on every write (`internal/api/server.go`), 1 MB request body limit.
+- Project-level access enforced in the API (`TestProjectManagerSeesOnlyAssignedProjects`, `TestViewerWithoutProjectsGetsNothing`).
+- Secret redaction in logs (`TestLoggerRedacts`); no `NEXT_PUBLIC_*` variable except the API base path.
+- Mirror stores user ID and display name only; no issue descriptions or time-entry comments are copied ([sync.md](sync.md)).
+- Content-Security-Policy added in this review; the end-to-end suite checks it is sent and causes no violations.
+- `npm audit` and `go vet` run; results in the findings below. `govulncheck` could not reach its database from the review environment, so Go dependencies still need a check.
+
 ## Findings
 
 | # | Finding | Severity | Decision | Owner | Due |
 |---|---|---|---|---|---|
-| | | | | | |
+| 1 | No Content-Security-Policy on pages or API | Medium | Fixed 2026-11-09: CSP in `next.config.ts` and on API responses | Claude | Done |
+| 2 | `@playwright/test` 1.55.0 downloads browsers without verifying TLS (GHSA-7mvr-c777-76hp). Test tooling only, not shipped | Low | Fixed 2026-11-09: upgraded to 1.55.1 | Claude | Done |
+| 3 | `next` 15.5.x bundles `postcss` 8.4.31 with advisories (GHSA-qx2v-qp2m-jg93 and related). It only processes the app's own CSS at build time, so no untrusted input reaches it | Low | Open: the fix is the Next 16 major upgrade. Decide whether to schedule it | Repo owner | TBD |
+| 4 | CSP allows `'unsafe-inline'` scripts because Next.js inlines bootstrap scripts | Low | Accepted for now: no user-supplied HTML is rendered; a nonce-based CSP would need middleware and dynamic rendering | Repo owner | TBD |
+| 5 | Go dependencies not checked with `govulncheck` | Low | Open: run `go run golang.org/x/vuln/cmd/govulncheck@latest ./...` on a machine with internet access | Repo owner | TBD |
+| 6 | Only the CTO role approves commitments and capacity, which was assumed, not agreed | Low | Open: confirm the approver role | Repo owner | TBD |
+| 7 | `APP_TIMEZONE` defaults to UTC, so dates near midnight can land on the wrong day for a team in India | Low | Open: set `APP_TIMEZONE=Asia/Kolkata` on the host if that is the team's zone | Repo owner | TBD |

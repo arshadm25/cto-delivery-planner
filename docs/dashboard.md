@@ -5,7 +5,7 @@ Backlog items P3-01 to P3-09.
 ## Run it locally with fictional data
 
 ```sh
-make up                                   # Postgres
+make up                                   # Postgres in Docker, or `make local-db` without Docker (local-setup.md)
 APP_ENV=development make devseed          # fake Redmine data and demo accounts
 make api                                  # Go API on :8080 (COOKIE_SECURE=false for local http)
 cd apps/web && npm install && npm run dev # dashboard on http://localhost:3000

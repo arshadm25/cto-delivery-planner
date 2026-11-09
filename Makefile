@@ -1,4 +1,6 @@
-.PHONY: api devseed web-e2e build test test-integration vet fmt-check discovery auth-check up down migrate sync-full sync-incremental deploy-build deploy-up backup
+# `make up` needs Docker. Without Docker, run PostgreSQL 16 yourself and use
+# `make local-db` instead (docs/local-setup.md).
+.PHONY: local-db api devseed web-e2e build test test-integration vet fmt-check discovery auth-check up down migrate sync-full sync-incremental deploy-build deploy-up backup
 
 DEV_COMPOSE = docker compose -f deploy/compose.dev.yml
 # Integration tests create and drop their own databases on this server.
@@ -29,6 +31,11 @@ up:
 
 down:
 	$(DEV_COMPOSE) down
+
+# Docker-free alternative to `make up`: creates the role and database on a
+# PostgreSQL server you already run (for example Homebrew on a Mac).
+local-db:
+	deploy/scripts/local-db.sh
 
 # Reads DATABASE_URL from .env or the environment.
 migrate: build
